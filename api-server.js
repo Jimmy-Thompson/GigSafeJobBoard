@@ -50,8 +50,12 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'App', 'index.html'));
+});
+
 app.use(express.static('App', {
-  index: 'index.html',
+  index: false,
   dotfiles: 'deny',
   extensions: ['html']
 }));

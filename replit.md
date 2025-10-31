@@ -102,9 +102,11 @@ Jobs aggregated from:
   - Consolidated frontend and backend to run on single Express server (port 5000)
   - Renamed landing.html to index.html for automatic root serving
   - Disabled directory listing in Express static file serving
-  - Fixed mobile compatibility by changing API_URL from `http://localhost:3000/api/jobs` to relative path `/api/jobs`
+  - Fixed mobile compatibility by changing API_URL from `http://localhost:3000/api/jobs` to relative path `/api/js`
   - Added cache control headers to prevent stale content
   - Configured deployment for autoscale target
+  - Fixed Subscribe button bell icon preservation by targeting `.subscribe-text` span instead of replacing entire button content
+  - Improved mobile subscribe modal layout with proper spacing (85vh max-height, 20px margins, adjusted padding) to prevent form from touching screen edges
 
 ## User Preferences
 None documented yet.

@@ -106,10 +106,12 @@ Jobs aggregated from:
 
 ## Recent Changes
 - **2025-10-31:** Configured for Replit environment
-  - Updated frontend to run on port 5000 with 0.0.0.0 binding
-  - Modified API URLs to use dynamic hostname detection
-  - Configured workflow to run both frontend and backend concurrently
-  - Added CORS support for http-server
+  - Consolidated frontend and backend to run on single Express server (port 5000)
+  - Renamed landing.html to index.html for automatic root serving
+  - Disabled directory listing in Express static file serving
+  - Updated API URLs to use relative paths (same origin)
+  - Added cache control headers to prevent stale content
+  - Configured deployment for autoscale target
 
 ## User Preferences
 None documented yet.

@@ -50,11 +50,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/', (req, res) => {
-  res.redirect('/landing.html');
-});
-
-app.use(express.static('App'));
+app.use(express.static('App', {
+  index: 'index.html',
+  dotfiles: 'deny',
+  extensions: ['html']
+}));
 
 function buildFilters(query) {
   const keyword = query.keyword?.trim() || '';

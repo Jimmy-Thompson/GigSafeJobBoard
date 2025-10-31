@@ -108,6 +108,7 @@ Jobs aggregated from:
   - Fixed Subscribe button bell icon preservation by targeting `.subscribe-text` span instead of replacing entire button content
   - Improved mobile subscribe modal layout with proper spacing (85vh max-height, 20px margins, adjusted padding) to prevent form from touching screen edges
   - Optimized mobile jobs section layout: hidden "Available Jobs" heading and reduced vertical spacing (32px top padding, 24px header margin) for better space efficiency
+  - Reduced mobile hero section padding from 80px/60px to 40px/40px (top/bottom) for more compact filter area
 
 ## User Preferences
 None documented yet.

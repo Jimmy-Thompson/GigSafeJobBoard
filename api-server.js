@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { getDb, closeDb } from './shared/db.js';
+import { getDb, getUserDb, closeDb } from './shared/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -167,14 +167,70 @@ app.get('/api/jobs', (req, res) => {
   const params = [];
   const whereClause = buildWhereClause(filters, params);
 
-  const db = getDb();
+  const masterDb = getDb();
 
   try {
-    const countQuery = `SELECT COUNT(*) as count FROM jobs ${whereClause}`;
-    const { count: totalJobs } = db.prepare(countQuery).get(...params);
+    // Attach user database to enable UNION ALL query across both databases
+    const userDbPath = path.join(__dirname, 'outputs', 'user_jobs.db');
+    masterDb.exec(`ATTACH DATABASE '${userDbPath}' AS user_db`);
 
-    const orderClause = filters.keyword
-      ? `ORDER BY
+    // Count total jobs from both databases using UNION ALL
+    const countQuery = `
+      SELECT SUM(cnt) as count FROM (
+        SELECT COUNT(*) as cnt FROM jobs ${whereClause}
+        UNION ALL
+        SELECT COUNT(*) as cnt FROM user_db.jobs ${whereClause}
+      )
+    `;
+    const { count: totalJobs } = masterDb.prepare(countQuery).get(...params, ...params);
+
+    // UNION ALL query to get jobs from both databases with pagination
+    // Wrap UNION in subquery to properly apply ORDER BY and LIMIT
+    const unionQuery = filters.keyword
+      ? `
+        SELECT * FROM (
+          SELECT
+            id,
+            job_url,
+            title,
+            company,
+            city,
+            state,
+            address,
+            description,
+            general_requirements,
+            pay,
+            benefits,
+            vehicle_requirements,
+            insurance_requirement,
+            schedule_details,
+            source_company,
+            submitted_at
+          FROM user_db.jobs
+          ${whereClause}
+          UNION ALL
+          SELECT
+            id,
+            job_url,
+            title,
+            company,
+            city,
+            state,
+            address,
+            description,
+            general_requirements,
+            pay,
+            benefits,
+            vehicle_requirements,
+            insurance_requirement,
+            schedule_details,
+            source_company,
+            submitted_at
+          FROM jobs
+          ${whereClause}
+        ) AS combined
+        ORDER BY
+          CASE WHEN submitted_at IS NOT NULL THEN 0 ELSE 1 END,
           CASE
             WHEN title LIKE ? COLLATE NOCASE THEN 1
             WHEN description LIKE ? COLLATE NOCASE THEN 2
@@ -182,37 +238,74 @@ app.get('/api/jobs', (req, res) => {
             WHEN general_requirements LIKE ? COLLATE NOCASE THEN 4
             ELSE 5
           END,
-          id DESC`
-      : 'ORDER BY id DESC';
+          submitted_at DESC,
+          id DESC
+        LIMIT ? OFFSET ?
+      `
+      : `
+        SELECT * FROM (
+          SELECT
+            id,
+            job_url,
+            title,
+            company,
+            city,
+            state,
+            address,
+            description,
+            general_requirements,
+            pay,
+            benefits,
+            vehicle_requirements,
+            insurance_requirement,
+            schedule_details,
+            source_company,
+            submitted_at
+          FROM user_db.jobs
+          ${whereClause}
+          UNION ALL
+          SELECT
+            id,
+            job_url,
+            title,
+            company,
+            city,
+            state,
+            address,
+            description,
+            general_requirements,
+            pay,
+            benefits,
+            vehicle_requirements,
+            insurance_requirement,
+            schedule_details,
+            source_company,
+            submitted_at
+          FROM jobs
+          ${whereClause}
+        ) AS combined
+        ORDER BY
+          CASE WHEN submitted_at IS NOT NULL THEN 0 ELSE 1 END,
+          submitted_at DESC,
+          id DESC
+        LIMIT ? OFFSET ?
+      `;
 
-    const jobsQuery = `
-      SELECT
-        id,
-        job_url,
-        title,
-        company,
-        city,
-        state,
-        address,
-        description,
-        general_requirements,
-        pay,
-        benefits,
-        vehicle_requirements,
-        insurance_requirement,
-        schedule_details,
-        source_company
-      FROM jobs
-      ${whereClause}
-      ${orderClause}
-      LIMIT ? OFFSET ?
-    `;
+    // Build params array for the union query
+    const queryParams = filters.keyword
+      ? [
+          ...params, // WHERE clause for user_db.jobs
+          ...params, // WHERE clause for main jobs
+          `%${filters.keyword}%`, `%${filters.keyword}%`, `%${filters.keyword}%`, `%${filters.keyword}%`, // ORDER BY relevance scoring
+          limit,
+          offset
+        ]
+      : [...params, ...params, limit, offset];
 
-    const jobsParams = filters.keyword
-      ? [...params, `%${filters.keyword}%`, `%${filters.keyword}%`, `%${filters.keyword}%`, `%${filters.keyword}%`, limit, offset]
-      : [...params, limit, offset];
+    const jobs = masterDb.prepare(unionQuery).all(...queryParams);
 
-    const jobs = db.prepare(jobsQuery).all(...jobsParams);
+    // Detach user database
+    masterDb.exec('DETACH DATABASE user_db');
 
     res.json({
       success: true,
@@ -228,6 +321,12 @@ app.get('/api/jobs', (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching jobs:', error);
+    // Ensure database is detached even on error
+    try {
+      masterDb.exec('DETACH DATABASE user_db');
+    } catch (detachError) {
+      // Ignore detach errors
+    }
     res.status(500).json({
       success: false,
       error: 'Failed to fetch jobs'
@@ -270,10 +369,10 @@ app.post('/api/jobs', (req, res) => {
     });
   }
 
-  const db = getDb();
+  const userDb = getUserDb();
 
   try {
-    const result = db.prepare(`
+    const result = userDb.prepare(`
       INSERT INTO jobs (
         job_url,
         title,
@@ -333,10 +432,17 @@ app.delete('/api/jobs/:id', (req, res) => {
     });
   }
 
-  const db = getDb();
+  const masterDb = getDb();
+  const userDb = getUserDb();
 
   try {
-    const result = db.prepare('DELETE FROM jobs WHERE id = ?').run(jobId);
+    // Try deleting from user database first
+    let result = userDb.prepare('DELETE FROM jobs WHERE id = ?').run(jobId);
+
+    // If not found in user DB, try master DB
+    if (result.changes === 0) {
+      result = masterDb.prepare('DELETE FROM jobs WHERE id = ?').run(jobId);
+    }
 
     if (result.changes === 0) {
       return res.status(404).json({
@@ -613,13 +719,12 @@ app.get('/api/admin/subscribers', requireAdmin, (req, res) => {
 
 // Protected: Get all submitted jobs
 app.get('/api/admin/submitted-jobs', requireAdmin, (req, res) => {
-  const db = getDb();
+  const userDb = getUserDb();
 
   try {
-    const jobs = db.prepare(`
+    const jobs = userDb.prepare(`
       SELECT *
       FROM jobs
-      WHERE submitted_at IS NOT NULL
       ORDER BY submitted_at DESC
     `).all();
 
@@ -870,6 +975,38 @@ app.get('/api/admin/download/:certId', requireAdmin, (req, res) => {
     });
   }
 });
+
+// Initialize user jobs database with schema
+function initializeUserJobsDb() {
+  const userDb = getUserDb();
+  
+  // Create jobs table if it doesn't exist
+  userDb.exec(`
+    CREATE TABLE IF NOT EXISTS jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_url TEXT NOT NULL,
+      title TEXT NOT NULL,
+      company TEXT NOT NULL,
+      city TEXT NOT NULL,
+      state TEXT NOT NULL,
+      address TEXT,
+      description TEXT NOT NULL,
+      general_requirements TEXT,
+      pay TEXT NOT NULL,
+      benefits TEXT,
+      vehicle_requirements TEXT,
+      insurance_requirement TEXT,
+      schedule_details TEXT,
+      source_company TEXT,
+      submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  console.log('User jobs database initialized');
+}
+
+// Initialize databases on startup
+initializeUserJobsDb();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API server running on http://0.0.0.0:${PORT}`);

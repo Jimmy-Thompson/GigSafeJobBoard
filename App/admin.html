@@ -257,6 +257,133 @@
         min-width: 100px;
       }
 
+      #jobsTable tbody tr {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+      }
+
+      #jobsTable tbody tr:hover {
+        background: #f0f4ff;
+      }
+
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        padding: 20px;
+        overflow-y: auto;
+      }
+
+      .modal-overlay.active {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal {
+        background: white;
+        border-radius: 12px;
+        max-width: 700px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+
+      .modal-header {
+        padding: 24px;
+        border-bottom: 1px solid #e0e0e0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .modal-header h2 {
+        font-size: 24px;
+        color: #333;
+        margin: 0;
+      }
+
+      .modal-close {
+        background: none;
+        border: none;
+        font-size: 28px;
+        color: #999;
+        cursor: pointer;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: background-color 0.2s ease;
+      }
+
+      .modal-close:hover {
+        background: #f0f0f0;
+        color: #333;
+      }
+
+      .modal-body {
+        padding: 24px;
+      }
+
+      .modal-section {
+        margin-bottom: 24px;
+      }
+
+      .modal-section:last-child {
+        margin-bottom: 0;
+      }
+
+      .modal-section h3 {
+        font-size: 14px;
+        font-weight: 600;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+      }
+
+      .modal-section p {
+        font-size: 15px;
+        color: #333;
+        line-height: 1.6;
+        margin: 0;
+      }
+
+      .modal-section .empty {
+        color: #999;
+        font-style: italic;
+      }
+
+      .modal-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+      }
+
+      .apply-link {
+        display: inline-block;
+        padding: 10px 20px;
+        background: #667eea;
+        color: white;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: background-color 0.2s ease;
+      }
+
+      .apply-link:hover {
+        background: #5568d3;
+      }
+
       @media (max-width: 768px) {
         table {
           display: block;
@@ -266,6 +393,14 @@
         th,
         td {
           min-width: 120px;
+        }
+
+        .modal-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .modal {
+          margin: 20px;
         }
       }
     </style>
@@ -344,6 +479,77 @@
             </thead>
             <tbody id="jobsBody"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="jobModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="modalJobTitle">Job Details</h2>
+          <button class="modal-close" id="closeModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-section">
+            <h3>Company</h3>
+            <p id="modalCompany"></p>
+          </div>
+
+          <div class="modal-grid">
+            <div class="modal-section">
+              <h3>Location</h3>
+              <p id="modalLocation"></p>
+            </div>
+            <div class="modal-section">
+              <h3>Pay</h3>
+              <p id="modalPay"></p>
+            </div>
+          </div>
+
+          <div class="modal-section">
+            <h3>Description</h3>
+            <p id="modalDescription"></p>
+          </div>
+
+          <div class="modal-section">
+            <h3>General Requirements</h3>
+            <p id="modalRequirements"></p>
+          </div>
+
+          <div class="modal-section">
+            <h3>Certifications Required</h3>
+            <p id="modalCertifications"></p>
+          </div>
+
+          <div class="modal-grid">
+            <div class="modal-section">
+              <h3>Vehicle Requirements</h3>
+              <p id="modalVehicle"></p>
+            </div>
+            <div class="modal-section">
+              <h3>Insurance Requirements</h3>
+              <p id="modalInsurance"></p>
+            </div>
+          </div>
+
+          <div class="modal-section">
+            <h3>Schedule Details</h3>
+            <p id="modalSchedule"></p>
+          </div>
+
+          <div class="modal-section">
+            <h3>Benefits</h3>
+            <p id="modalBenefits"></p>
+          </div>
+
+          <div class="modal-section">
+            <h3>Submitted</h3>
+            <p id="modalSubmitted"></p>
+          </div>
+
+          <div class="modal-section">
+            <a id="modalApplyLink" href="#" target="_blank" class="apply-link">View Application URL</a>
+          </div>
         </div>
       </div>
     </div>
@@ -518,6 +724,7 @@
               <td>${date}</td>
             `;
 
+            row.addEventListener("click", () => showJobModal(job));
             tbody.appendChild(row);
           });
 
@@ -528,6 +735,74 @@
             "Error loading job submissions";
         }
       }
+
+      function showJobModal(job) {
+        const modal = document.getElementById("jobModal");
+        
+        document.getElementById("modalJobTitle").textContent = job.title || "Job Details";
+        document.getElementById("modalCompany").textContent = job.company || "-";
+        
+        const location = [job.address, job.city, job.state].filter(Boolean).join(", ") || "-";
+        document.getElementById("modalLocation").textContent = location;
+        
+        const pay = job.pay || "-";
+        document.getElementById("modalPay").textContent = pay;
+        
+        document.getElementById("modalDescription").textContent = job.description || "-";
+        document.getElementById("modalDescription").className = job.description ? "" : "empty";
+        
+        document.getElementById("modalRequirements").textContent = job.general_requirements || "None specified";
+        document.getElementById("modalRequirements").className = job.general_requirements ? "" : "empty";
+        
+        document.getElementById("modalCertifications").textContent = job.certifications || "None required";
+        document.getElementById("modalCertifications").className = job.certifications ? "" : "empty";
+        
+        document.getElementById("modalVehicle").textContent = job.vehicle_requirements || "Not specified";
+        document.getElementById("modalVehicle").className = job.vehicle_requirements ? "" : "empty";
+        
+        document.getElementById("modalInsurance").textContent = job.insurance_requirement || "Not specified";
+        document.getElementById("modalInsurance").className = job.insurance_requirement ? "" : "empty";
+        
+        document.getElementById("modalSchedule").textContent = job.schedule_details || "Not specified";
+        document.getElementById("modalSchedule").className = job.schedule_details ? "" : "empty";
+        
+        document.getElementById("modalBenefits").textContent = job.benefits || "Not specified";
+        document.getElementById("modalBenefits").className = job.benefits ? "" : "empty";
+        
+        const submittedDate = new Date(job.submitted_at).toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        document.getElementById("modalSubmitted").textContent = submittedDate;
+        
+        const applyLink = document.getElementById("modalApplyLink");
+        if (job.job_url) {
+          applyLink.href = job.job_url;
+          applyLink.style.display = "inline-block";
+        } else {
+          applyLink.style.display = "none";
+        }
+        
+        modal.classList.add("active");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeJobModal() {
+        const modal = document.getElementById("jobModal");
+        modal.classList.remove("active");
+        document.body.style.overflow = "";
+      }
+
+      document.getElementById("closeModal").addEventListener("click", closeJobModal);
+      
+      document.getElementById("jobModal").addEventListener("click", (e) => {
+        if (e.target.id === "jobModal") {
+          closeJobModal();
+        }
+      });
 
       loadSubscribers();
       loadJobs();

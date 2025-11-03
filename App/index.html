@@ -1863,6 +1863,36 @@
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
 
     <script>
+      // Analytics tracking utility
+      (function() {
+        // Get or create session ID
+        let sessionId = sessionStorage.getItem('analytics_session_id');
+        if (!sessionId) {
+          sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+          sessionStorage.setItem('analytics_session_id', sessionId);
+        }
+
+        // Track event function
+        window.trackEvent = function(eventType, eventData = {}) {
+          // Fire and forget - don't wait for response
+          fetch('/api/analytics', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event_type: eventType,
+              event_data: eventData,
+              session_id: sessionId
+            })
+          }).catch(() => {}); // Silently fail - don't break user experience
+        };
+
+        // Track page visit once per session
+        if (!sessionStorage.getItem('analytics_page_visited')) {
+          trackEvent('page_visit');
+          sessionStorage.setItem('analytics_page_visited', 'true');
+        }
+      })();
+
       // Jobs infinite scroll functionality
       console.log("==============================");
       console.log("Jobs script initializing...");
@@ -2342,6 +2372,13 @@
             });
           }
 
+          // Track job click with custom analytics
+          trackEvent('job_click', {
+            title: job.title,
+            company: job.company,
+            location: `${job.city}, ${job.state}`
+          });
+
           // Open job URL
           window.open(job.job_url, "_blank");
         };
@@ -2454,6 +2491,19 @@
         console.log("Search triggered!");
 
         const filters = getCurrentFilters();
+        
+        // Track analytics - search or filter
+        if (filters.keyword) {
+          trackEvent('search', { keyword: filters.keyword });
+        }
+        if (filters.state || filters.city || filters.vehicle !== 'Any') {
+          trackEvent('filter', { 
+            state: filters.state, 
+            city: filters.city, 
+            vehicle: filters.vehicle 
+          });
+        }
+        
         const useFuzzy = shouldUseFuzzySearch(filters);
 
         if (useFuzzy) {

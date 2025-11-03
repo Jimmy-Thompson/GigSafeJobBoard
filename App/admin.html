@@ -701,15 +701,6 @@
 
             const pay = job.pay || "-";
 
-            const details = `
-              <div class="job-details">
-                ${job.general_requirements ? `<div><strong>Requirements:</strong> ${job.general_requirements}</div>` : ""}
-                ${job.certifications ? `<div><strong>Certifications:</strong> ${job.certifications}</div>` : ""}
-                ${job.vehicle_requirements ? `<div><strong>Vehicle:</strong> ${job.vehicle_requirements}</div>` : ""}
-                ${job.schedule_details ? `<div><strong>Schedule:</strong> ${job.schedule_details}</div>` : ""}
-              </div>
-            `;
-
             const date = new Date(job.submitted_at).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
@@ -723,7 +714,7 @@
               <td>${job.company || "-"}</td>
               <td>${location}</td>
               <td>${pay}</td>
-              <td>${details}</td>
+              <td><span style="color: #667eea; cursor: pointer;">Click to view →</span></td>
               <td>${date}</td>
             `;
 
@@ -771,8 +762,9 @@
         document.getElementById("modalRequirements").textContent = job.general_requirements || "None specified";
         document.getElementById("modalRequirements").className = job.general_requirements ? "" : "empty";
         
-        document.getElementById("modalCertifications").textContent = job.certifications || "None required";
-        document.getElementById("modalCertifications").className = job.certifications ? "" : "empty";
+        // Note: The jobs table doesn't have a certifications field, hiding this section
+        document.getElementById("modalCertifications").textContent = "Not specified";
+        document.getElementById("modalCertifications").className = "empty";
         
         document.getElementById("modalVehicle").textContent = job.vehicle_requirements || "Not specified";
         document.getElementById("modalVehicle").className = job.vehicle_requirements ? "" : "empty";

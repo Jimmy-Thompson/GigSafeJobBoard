@@ -148,9 +148,12 @@ Download a specific certification file.
 Requires authentication. Files are NOT publicly accessible.
 
 #### GET /api/admin/analytics
-Get aggregated analytics statistics.
+Get aggregated analytics statistics with optional time-series data.
 
 Requires authentication.
+
+Query Parameters:
+- `timeRange` - Time range filter (optional): "all", "today", "yesterday", "7days", "14days"
 
 Returns:
 - `totalVisitors` - Total unique visitors (unique session IDs)
@@ -158,7 +161,10 @@ Returns:
 - `weekVisitors` - Unique visitors this week
 - `topSearches` - Most popular search keywords with counts
 - `topFilters` - Most used filter combinations with counts
+- `topFilterSelections` - Individual filter selections (state, city, vehicle) with counts
 - `topClicks` - Most clicked jobs with title, company, location, and click counts
+- `clicksOverTime` - Array of {date, clicks} for total daily clicks (filtered by timeRange)
+- `top5JobsOverTime` - Array of top 5 jobs with their daily click data (filtered by timeRange)
 
 ### Public API Endpoints
 
@@ -196,6 +202,17 @@ Jobs aggregated from:
 - US-Pack (1 job)
 
 ## Recent Changes
+- **2025-11-03:** Job Clicks Over Time Charts
+  - Added Chart.js library for data visualization
+  - Created two interactive line charts in Analytics dashboard:
+    - Total Clicks Per Day: Shows overall daily click volume
+    - Top 5 Jobs Clicks Over Time: Individual trend lines for most popular jobs
+  - Time range selector with options: All Time, Today, Yesterday, Last 7 Days, Last 14 Days
+  - Backend analytics endpoint now returns time-series data (clicksOverTime, top5JobsOverTime)
+  - Charts automatically refresh when time range changes
+  - Hover tooltips show exact click counts for each date
+  - Color-coded lines for easy differentiation of job trends
+
 - **2025-11-03:** Enhanced Filter Change Tracking
   - Added real-time tracking for individual filter selections (state, city, vehicle)
   - Each dropdown change now fires a 'filter_change' event with filter_type and value

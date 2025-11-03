@@ -409,6 +409,7 @@
         }
       }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   </head>
   <body>
     <div class="header">
@@ -575,6 +576,37 @@
             <tbody id="clicksBody"></tbody>
           </table>
         </div>
+
+        <h2>Job Clicks Over Time</h2>
+        <div class="table-container">
+          <div style="margin-bottom: 20px;">
+            <label for="timeRangeSelector" style="font-weight: 500; margin-right: 10px;">Time Range:</label>
+            <select id="timeRangeSelector" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: white; cursor: pointer;">
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="7days">Last 7 Days</option>
+              <option value="14days">Last 14 Days</option>
+            </select>
+          </div>
+
+          <div id="chartsLoading" class="loading">Loading chart data...</div>
+          <div id="chartsEmpty" class="empty-state" style="display: none">
+            <div>No click data available for the selected time range</div>
+          </div>
+
+          <div id="chartsContainer" style="display: none;">
+            <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+              <h3 style="margin-bottom: 16px; font-size: 16px; color: #555;">Total Clicks Per Day</h3>
+              <canvas id="totalClicksChart" style="max-height: 300px;"></canvas>
+            </div>
+
+            <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+              <h3 style="margin-bottom: 16px; font-size: 16px; color: #555;">Top 5 Jobs Clicks Over Time</h3>
+              <canvas id="top5JobsChart" style="max-height: 400px;"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -692,6 +724,13 @@
             loadAnalytics();
           }
         });
+      });
+
+      // Time range selector for charts
+      document.getElementById("timeRangeSelector").addEventListener("change", (e) => {
+        const timeRange = e.target.value;
+        console.log("Time range changed to:", timeRange);
+        loadAnalytics(timeRange);
       });
 
       async function loadSubscribers() {
@@ -861,10 +900,13 @@
         }
       }
 
-      async function loadAnalytics() {
-        console.log("=== loadAnalytics() called ===");
+      let totalClicksChartInstance = null;
+      let top5JobsChartInstance = null;
+
+      async function loadAnalytics(timeRange = 'all') {
+        console.log("=== loadAnalytics() called with timeRange:", timeRange, "===");
         try {
-          const response = await fetch("/api/admin/analytics");
+          const response = await fetch(`/api/admin/analytics?timeRange=${timeRange}`);
           const data = await response.json();
           console.log("Analytics data received:", data);
 
@@ -976,8 +1018,199 @@
             clicksEmpty.style.display = "block";
           }
 
+          // Render charts
+          renderCharts(stats.clicksOverTime, stats.top5JobsOverTime);
+
         } catch (error) {
           console.error("Error loading analytics:", error);
+        }
+      }
+
+      function renderCharts(clicksOverTime, top5JobsOverTime) {
+        const chartsLoading = document.getElementById("chartsLoading");
+        const chartsEmpty = document.getElementById("chartsEmpty");
+        const chartsContainer = document.getElementById("chartsContainer");
+
+        chartsLoading.style.display = "none";
+
+        // Check if we have data
+        if (!clicksOverTime || clicksOverTime.length === 0) {
+          chartsEmpty.style.display = "block";
+          chartsContainer.style.display = "none";
+          return;
+        }
+
+        chartsEmpty.style.display = "none";
+        chartsContainer.style.display = "block";
+
+        // Prepare data for total clicks chart
+        const dates = clicksOverTime.map(d => d.date);
+        const totalClicks = clicksOverTime.map(d => d.clicks);
+
+        // Destroy existing chart instances if they exist
+        if (totalClicksChartInstance) {
+          totalClicksChartInstance.destroy();
+        }
+        if (top5JobsChartInstance) {
+          top5JobsChartInstance.destroy();
+        }
+
+        // Render Total Clicks Chart
+        const totalClicksCtx = document.getElementById("totalClicksChart").getContext("2d");
+        totalClicksChartInstance = new Chart(totalClicksCtx, {
+          type: "line",
+          data: {
+            labels: dates,
+            datasets: [{
+              label: "Total Clicks",
+              data: totalClicks,
+              borderColor: "#667eea",
+              backgroundColor: "rgba(102, 126, 234, 0.1)",
+              borderWidth: 2,
+              tension: 0.4,
+              fill: true,
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                mode: "index",
+                intersect: false,
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                padding: 12,
+                titleFont: { size: 14 },
+                bodyFont: { size: 13 },
+                callbacks: {
+                  label: function(context) {
+                    return `Clicks: ${context.parsed.y}`;
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  stepSize: 1,
+                  precision: 0
+                },
+                grid: {
+                  color: "rgba(0, 0, 0, 0.05)"
+                }
+              },
+              x: {
+                grid: {
+                  display: false
+                }
+              }
+            },
+            interaction: {
+              mode: "nearest",
+              axis: "x",
+              intersect: false
+            }
+          }
+        });
+
+        // Render Top 5 Jobs Chart
+        if (top5JobsOverTime && top5JobsOverTime.length > 0) {
+          const colors = [
+            { border: "#667eea", bg: "rgba(102, 126, 234, 0.1)" },
+            { border: "#f093fb", bg: "rgba(240, 147, 251, 0.1)" },
+            { border: "#4facfe", bg: "rgba(79, 172, 254, 0.1)" },
+            { border: "#43e97b", bg: "rgba(67, 233, 123, 0.1)" },
+            { border: "#fa709a", bg: "rgba(250, 112, 154, 0.1)" }
+          ];
+
+          // Get all unique dates from all jobs
+          const allDates = new Set();
+          top5JobsOverTime.forEach(job => {
+            job.data.forEach(d => allDates.add(d.date));
+          });
+          const sortedDates = Array.from(allDates).sort();
+
+          const datasets = top5JobsOverTime.map((job, index) => {
+            const color = colors[index % colors.length];
+            
+            // Create a map for quick lookup
+            const dataMap = new Map(job.data.map(d => [d.date, d.clicks]));
+            
+            // Fill in data for all dates, using 0 for missing dates
+            const fullData = sortedDates.map(date => dataMap.get(date) || 0);
+
+            return {
+              label: `${job.title} (${job.company})`,
+              data: fullData,
+              borderColor: color.border,
+              backgroundColor: color.bg,
+              borderWidth: 2,
+              tension: 0.4,
+              fill: false,
+              pointRadius: 3,
+              pointHoverRadius: 5
+            };
+          });
+
+          const top5JobsCtx = document.getElementById("top5JobsChart").getContext("2d");
+          top5JobsChartInstance = new Chart(top5JobsCtx, {
+            type: "line",
+            data: {
+              labels: sortedDates,
+              datasets: datasets
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: {
+                legend: {
+                  display: true,
+                  position: "bottom",
+                  labels: {
+                    padding: 15,
+                    usePointStyle: true,
+                    font: { size: 11 }
+                  }
+                },
+                tooltip: {
+                  mode: "index",
+                  intersect: false,
+                  backgroundColor: "rgba(0, 0, 0, 0.8)",
+                  padding: 12,
+                  titleFont: { size: 14 },
+                  bodyFont: { size: 12 }
+                }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  ticks: {
+                    stepSize: 1,
+                    precision: 0
+                  },
+                  grid: {
+                    color: "rgba(0, 0, 0, 0.05)"
+                  }
+                },
+                x: {
+                  grid: {
+                    display: false
+                  }
+                }
+              },
+              interaction: {
+                mode: "nearest",
+                axis: "x",
+                intersect: false
+              }
+            }
+          });
         }
       }
 

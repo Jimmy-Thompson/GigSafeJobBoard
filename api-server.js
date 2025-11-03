@@ -640,8 +640,28 @@ app.get('/api/admin/submitted-jobs', requireAdmin, (req, res) => {
 // Protected: Get analytics data
 app.get('/api/admin/analytics', requireAdmin, (req, res) => {
   const db = getDb();
+  const timeRange = req.query.timeRange || 'all';
 
   try {
+    // Helper function to get date filter SQL based on time range
+    const getDateFilter = (range) => {
+      switch (range) {
+        case 'today':
+          return "AND DATE(created_at) = DATE('now')";
+        case 'yesterday':
+          return "AND DATE(created_at) = DATE('now', '-1 day')";
+        case '7days':
+          return "AND created_at >= datetime('now', '-7 days')";
+        case '14days':
+          return "AND created_at >= datetime('now', '-14 days')";
+        case 'all':
+        default:
+          return '';
+      }
+    };
+
+    const dateFilter = getDateFilter(timeRange);
+
     // Unique visitors (unique session IDs)
     const uniqueVisitorsTotal = db.prepare(`
       SELECT COUNT(DISTINCT session_id) as count
@@ -718,6 +738,55 @@ app.get('/api/admin/analytics', requireAdmin, (req, res) => {
       LIMIT 20
     `).all();
 
+    // Time-series data for clicks over time (total clicks per day)
+    const clicksOverTime = db.prepare(`
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as clicks
+      FROM analytics_events
+      WHERE event_type = 'job_click'
+      ${dateFilter}
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `).all();
+
+    // Get top 5 most clicked jobs for the selected time range
+    const top5JobsForRange = db.prepare(`
+      SELECT 
+        json_extract(event_data, '$.title') as job_title,
+        json_extract(event_data, '$.company') as company,
+        COUNT(*) as clicks
+      FROM analytics_events
+      WHERE event_type = 'job_click'
+      ${dateFilter}
+      GROUP BY job_title, company
+      ORDER BY clicks DESC
+      LIMIT 5
+    `).all();
+
+    // Time-series data for top 5 jobs (clicks per day for each job)
+    const top5JobsOverTime = [];
+    for (const job of top5JobsForRange) {
+      const jobClicksOverTime = db.prepare(`
+        SELECT 
+          DATE(created_at) as date,
+          COUNT(*) as clicks
+        FROM analytics_events
+        WHERE event_type = 'job_click'
+        AND json_extract(event_data, '$.title') = ?
+        AND json_extract(event_data, '$.company') = ?
+        ${dateFilter}
+        GROUP BY DATE(created_at)
+        ORDER BY date ASC
+      `).all(job.job_title, job.company);
+
+      top5JobsOverTime.push({
+        title: job.job_title,
+        company: job.company,
+        data: jobClicksOverTime
+      });
+    }
+
     res.json({
       success: true,
       stats: {
@@ -748,7 +817,9 @@ app.get('/api/admin/analytics', requireAdmin, (req, res) => {
           company: j.company,
           location: j.location || 'Location not tracked',
           count: j.clicks
-        }))
+        })),
+        clicksOverTime: clicksOverTime,
+        top5JobsOverTime: top5JobsOverTime
       }
     });
   } catch (error) {

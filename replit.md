@@ -42,6 +42,7 @@ GigSafeJobBoard/
 - **jobs:** Job listings with title, company, location, requirements, benefits, etc. Includes `submitted_at` column to track user-submitted jobs for 24-hour visibility.
 - **subscribers:** Email subscriptions for job alerts
 - **subscriber_certifications:** Uploaded certification files
+- **analytics_events:** Event tracking for visitor analytics (page visits, searches, filters, job clicks) with session IDs and timestamps
 
 ## Key Features
 - Advanced search across job titles, descriptions, and requirements
@@ -50,7 +51,8 @@ GigSafeJobBoard/
 - Certification search functionality
 - Job alerts subscription with certification upload
 - **Job posting form** - Users can submit jobs that appear for 24 hours
-- **Secure admin portal** - Password-protected dashboard to view subscribers and job submissions
+- **Secure admin portal** - Password-protected dashboard to view subscribers, job submissions, and analytics
+- **Custom analytics system** - Track page visits, searches, filters, and job clicks with session-based de-duplication
 - Infinite scroll pagination
 - Responsive design for mobile, tablet, and desktop
 
@@ -106,9 +108,10 @@ Without these secrets, the server will not start (fail-fast security).
 
 ### Admin Pages
 - **/admin-login.html** - Secure login page
-- **/admin.html** - Dashboard with two tabs:
+- **/admin.html** - Dashboard with three tabs:
   - **Subscribers Tab:** View all email subscribers with their certifications and download uploaded files
   - **Job Submissions Tab:** View all user-submitted job posts
+  - **Analytics Tab:** View visitor statistics, popular searches, filters, and job clicks
 
 ### Admin API Endpoints (Protected)
 
@@ -144,6 +147,29 @@ Download a specific certification file.
 
 Requires authentication. Files are NOT publicly accessible.
 
+#### GET /api/admin/analytics
+Get aggregated analytics statistics.
+
+Requires authentication.
+
+Returns:
+- `totalVisitors` - Total unique visitors (unique session IDs)
+- `todayVisitors` - Unique visitors today
+- `weekVisitors` - Unique visitors this week
+- `topSearches` - Most popular search keywords with counts
+- `topFilters` - Most used filter combinations with counts
+- `topClicks` - Most clicked jobs with title, company, location, and click counts
+
+### Public API Endpoints
+
+#### POST /api/analytics
+Track analytics events (public endpoint).
+
+Body (JSON):
+- `event_type` (required) - Event type: "page_visit", "search", "filter", or "job_click"
+- `event_data` (optional) - JSON object with event-specific data
+- `session_id` (required) - Unique session identifier
+
 ## Development
 
 ### Running the Application
@@ -170,10 +196,19 @@ Jobs aggregated from:
 - US-Pack (1 job)
 
 ## Recent Changes
+- **2025-11-03:** Custom Analytics System
+  - Created analytics_events table in SQLite database with session-based tracking
+  - Implemented POST /api/analytics endpoint for tracking page visits, searches, filters, and job clicks
+  - Added GET /api/admin/analytics endpoint for fetching aggregated statistics
+  - Built Analytics tab in admin dashboard with visitor stats, popular searches, filters, and job clicks
+  - Integrated frontend tracking code using sessionStorage for session IDs
+  - Session-based de-duplication ensures one page_visit per session
+  - Fire-and-forget event tracking to avoid blocking user experience
+
 - **2025-11-03:** Admin Portal
   - Created secure admin portal with session-based authentication
   - Added admin-login.html with password authentication
-  - Built admin.html dashboard with two tabs (Subscribers and Job Submissions)
+  - Built admin.html dashboard with three tabs (Subscribers, Job Submissions, and Analytics)
   - Implemented protected API endpoints: /api/admin/subscribers, /api/admin/submitted-jobs, /api/admin/download/:certId
   - Added fail-fast security: server requires ADMIN_PASSWORD and ADMIN_SESSION_SECRET environment variables
   - Removed public access to /uploads directory - files only accessible via authenticated download endpoint

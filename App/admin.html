@@ -193,6 +193,11 @@
         color: #22863a;
       }
 
+      .badge-expired {
+        background: #e0e0e0;
+        color: #666;
+      }
+
       .cert-list {
         margin: 0;
         padding: 0;
@@ -475,6 +480,7 @@
                 <th>Pay</th>
                 <th>Details</th>
                 <th>Submitted</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody id="jobsBody"></tbody>
@@ -709,6 +715,30 @@
               minute: "2-digit",
             });
 
+            // Calculate job status (active if within 24 hours)
+            const submittedAt = new Date(job.submitted_at);
+            const now = new Date();
+            const hoursSinceSubmitted = (now - submittedAt) / (1000 * 60 * 60);
+            const isActive = hoursSinceSubmitted < 24;
+            
+            let statusBadge = '';
+            if (isActive) {
+              const hoursRemaining = 24 - hoursSinceSubmitted;
+              const hours = Math.floor(hoursRemaining);
+              const minutes = Math.floor((hoursRemaining - hours) * 60);
+              
+              let timeText = '';
+              if (hours > 0) {
+                timeText = `${hours}h ${minutes}m left`;
+              } else {
+                timeText = `${minutes}m left`;
+              }
+              
+              statusBadge = `<span class="badge badge-success">Active - ${timeText}</span>`;
+            } else {
+              statusBadge = `<span class="badge badge-expired">Expired</span>`;
+            }
+
             row.innerHTML = `
               <td><strong>${job.title}</strong></td>
               <td>${job.company || "-"}</td>
@@ -716,6 +746,7 @@
               <td>${pay}</td>
               <td><span style="color: #667eea; cursor: pointer;">Click to view →</span></td>
               <td>${date}</td>
+              <td>${statusBadge}</td>
             `;
 
             row.addEventListener("click", () => {

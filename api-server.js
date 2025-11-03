@@ -60,6 +60,9 @@ app.use(express.static('App', {
   extensions: ['html']
 }));
 
+// Serve uploaded certification files
+app.use('/uploads', express.static('uploads'));
+
 function buildFilters(query) {
   const keyword = query.keyword?.trim() || '';
   const state = query.state?.trim() || '';
@@ -445,6 +448,45 @@ app.post('/api/subscribe', upload.array('certifications', 10), (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to save subscription'
+    });
+  }
+});
+
+// API endpoint to get all subscribers and their certifications
+app.get('/api/subscribers', (req, res) => {
+  const db = getDb();
+
+  try {
+    const subscribers = db.prepare(`
+      SELECT id, email, first_name, last_name, city, state, source_tag, created_at
+      FROM subscribers
+      ORDER BY created_at DESC
+    `).all();
+
+    // Get certifications for each subscriber
+    const subscribersWithCerts = subscribers.map(sub => {
+      const certs = db.prepare(`
+        SELECT id, certification_type, file_name, file_path, file_size, mime_type, uploaded_at
+        FROM subscriber_certifications
+        WHERE subscriber_id = ?
+      `).all(sub.id);
+
+      return {
+        ...sub,
+        certifications: certs
+      };
+    });
+
+    res.json({
+      success: true,
+      count: subscribers.length,
+      subscribers: subscribersWithCerts
+    });
+  } catch (error) {
+    console.error('Error fetching subscribers:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch subscribers'
     });
   }
 });

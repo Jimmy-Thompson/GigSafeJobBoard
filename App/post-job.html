@@ -447,6 +447,67 @@
         }
       }
 
+      .certifications-tags-container {
+        background: rgba(255, 255, 255, 0.5);
+        padding: 16px 20px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+      }
+
+      .certifications-label {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--text-secondary);
+        margin-bottom: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .certifications-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .cert-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: var(--radius-pill);
+        font-weight: 600;
+        font-size: 0.9rem;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        cursor: default;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+
+      .cert-tag:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      }
+
+      .cert-tag-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.15);
+        color: rgba(0, 0, 0, 0.6);
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.2s ease, color 0.2s ease;
+      }
+
+      .cert-tag-remove:hover {
+        background: rgba(0, 0, 0, 0.25);
+        color: rgba(0, 0, 0, 0.8);
+      }
+
       @media (max-width: 768px) {
         .form-container {
           padding: 32px 24px;
@@ -603,13 +664,25 @@
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="general_requirements">Skill Requirements/Certifications</label>
-                <textarea
-                  id="general_requirements"
-                  name="general_requirements"
-                  class="form-textarea"
-                  placeholder="List qualifications, experience, or skills needed..."
-                ></textarea>
+                <label class="form-label" for="certifications_select">Certifications</label>
+                <select class="form-select" id="certifications_select">
+                  <option value="">Select a certification</option>
+                  <option value="HIPPA">HIPPA</option>
+                  <option value="BPP">BPP</option>
+                  <option value="STA">STA</option>
+                  <option value="TSA">TSA</option>
+                  <option value="TWIC">TWIC</option>
+                  <option value="CDA">CDA</option>
+                  <option value="NSA">NSA</option>
+                  <option value="CIA">CIA</option>
+                  <option value="FBI">FBI</option>
+                  <option value="PBS">PBS</option>
+                </select>
+                <div class="certifications-tags-container" id="certificationsContainer" style="margin-top: 16px; display: none">
+                  <div class="certifications-label">Selected Certifications:</div>
+                  <div class="certifications-tags" id="certificationsTags"></div>
+                </div>
+                <input type="hidden" id="general_requirements" name="general_requirements" />
               </div>
 
               <div class="form-group">
@@ -712,6 +785,104 @@
       const submitBtn = document.getElementById('submitBtn');
       const successModal = document.getElementById('successModal');
       const jobPreview = document.getElementById('jobPreview');
+      const certificationsSelect = document.getElementById('certifications_select');
+      const certificationsContainer = document.getElementById('certificationsContainer');
+      const certificationsTags = document.getElementById('certificationsTags');
+      const generalRequirementsInput = document.getElementById('general_requirements');
+
+      const selectedCertifications = [];
+      const pastelColors = [
+        "#FFE5E5",
+        "#E5F3FF",
+        "#E5FFE5",
+        "#FFE5FF",
+        "#FFF5E5",
+        "#FFFFE5",
+        "#E5FFFF",
+        "#F5E5FF",
+        "#FFE5EC",
+        "#E5FFF5",
+      ];
+      let colorIndex = 0;
+
+      function addCertification(cert) {
+        if (!cert || selectedCertifications.includes(cert)) {
+          return;
+        }
+
+        selectedCertifications.push(cert);
+
+        const tag = document.createElement("div");
+        tag.className = "cert-tag";
+        tag.dataset.cert = cert;
+
+        const color = pastelColors[colorIndex % pastelColors.length];
+        colorIndex++;
+        tag.style.backgroundColor = color;
+        tag.style.color = "#333";
+
+        tag.innerHTML = `
+          <span>${cert}</span>
+          <span class="cert-tag-remove">&times;</span>
+        `;
+
+        tag.querySelector(".cert-tag-remove").addEventListener("click", (e) => {
+          e.stopPropagation();
+          removeCertification(cert);
+        });
+
+        certificationsTags.appendChild(tag);
+
+        if (certificationsContainer) {
+          certificationsContainer.style.display = "block";
+        }
+
+        const option = certificationsSelect.querySelector(`option[value="${cert}"]`);
+        if (option) {
+          option.disabled = true;
+          option.style.display = "none";
+        }
+
+        certificationsSelect.value = "";
+        updateHiddenField();
+      }
+
+      function removeCertification(cert) {
+        const index = selectedCertifications.indexOf(cert);
+        if (index > -1) {
+          selectedCertifications.splice(index, 1);
+        }
+
+        const tag = certificationsTags.querySelector(`[data-cert="${cert}"]`);
+        if (tag) {
+          tag.remove();
+        }
+
+        const option = certificationsSelect.querySelector(`option[value="${cert}"]`);
+        if (option) {
+          option.disabled = false;
+          option.style.display = "";
+        }
+
+        if (selectedCertifications.length === 0 && certificationsContainer) {
+          certificationsContainer.style.display = "none";
+        }
+
+        updateHiddenField();
+      }
+
+      function updateHiddenField() {
+        generalRequirementsInput.value = selectedCertifications.join(', ');
+      }
+
+      if (certificationsSelect) {
+        certificationsSelect.addEventListener("change", (e) => {
+          const cert = e.target.value;
+          if (cert) {
+            addCertification(cert);
+          }
+        });
+      }
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();

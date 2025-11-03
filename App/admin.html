@@ -423,6 +423,7 @@
       <div class="tabs">
         <button class="tab active" data-tab="subscribers">Subscribers</button>
         <button class="tab" data-tab="jobs">Job Submissions</button>
+        <button class="tab" data-tab="analytics">Analytics</button>
       </div>
 
       <div id="subscribers-tab" class="tab-content active">
@@ -484,6 +485,76 @@
               </tr>
             </thead>
             <tbody id="jobsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="analytics-tab" class="tab-content">
+        <div class="stats">
+          <div class="stat-card">
+            <h3>Total Visitors</h3>
+            <div class="number" id="totalVisitors">-</div>
+          </div>
+          <div class="stat-card">
+            <h3>Today's Visitors</h3>
+            <div class="number" id="todayVisitors">-</div>
+          </div>
+          <div class="stat-card">
+            <h3>This Week</h3>
+            <div class="number" id="weekVisitors">-</div>
+          </div>
+        </div>
+
+        <h2>Popular Searches</h2>
+        <div class="table-container">
+          <div id="searchesLoading" class="loading">Loading search data...</div>
+          <div id="searchesEmpty" class="empty-state" style="display: none">
+            <div>No searches yet</div>
+          </div>
+          <table id="searchesTable" style="display: none">
+            <thead>
+              <tr>
+                <th>Search Term</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody id="searchesBody"></tbody>
+          </table>
+        </div>
+
+        <h2>Popular Filters</h2>
+        <div class="table-container">
+          <div id="filtersLoading" class="loading">Loading filter data...</div>
+          <div id="filtersEmpty" class="empty-state" style="display: none">
+            <div>No filters used yet</div>
+          </div>
+          <table id="filtersTable" style="display: none">
+            <thead>
+              <tr>
+                <th>Filter</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody id="filtersBody"></tbody>
+          </table>
+        </div>
+
+        <h2>Popular Job Clicks</h2>
+        <div class="table-container">
+          <div id="clicksLoading" class="loading">Loading click data...</div>
+          <div id="clicksEmpty" class="empty-state" style="display: none">
+            <div>No job clicks yet</div>
+          </div>
+          <table id="clicksTable" style="display: none">
+            <thead>
+              <tr>
+                <th>Job Title</th>
+                <th>Company</th>
+                <th>Location</th>
+                <th>Clicks</th>
+              </tr>
+            </thead>
+            <tbody id="clicksBody"></tbody>
           </table>
         </div>
       </div>
@@ -597,6 +668,11 @@
             .querySelectorAll(".tab-content")
             .forEach((c) => c.classList.remove("active"));
           document.getElementById(`${tabName}-tab`).classList.add("active");
+
+          // Load analytics when analytics tab is clicked
+          if (tabName === "analytics") {
+            loadAnalytics();
+          }
         });
       });
 
@@ -764,6 +840,101 @@
           console.error("Error loading jobs:", error);
           document.getElementById("jobsLoading").textContent =
             "Error loading job submissions";
+        }
+      }
+
+      async function loadAnalytics() {
+        console.log("=== loadAnalytics() called ===");
+        try {
+          const response = await fetch("/api/admin/analytics");
+          const data = await response.json();
+          console.log("Analytics data received:", data);
+
+          if (!data.success) {
+            console.log("Analytics fetch failed");
+            return;
+          }
+
+          const stats = data.stats;
+          
+          // Update visitor stats
+          document.getElementById("totalVisitors").textContent = stats.totalVisitors || "0";
+          document.getElementById("todayVisitors").textContent = stats.todayVisitors || "0";
+          document.getElementById("weekVisitors").textContent = stats.weekVisitors || "0";
+
+          // Popular searches
+          const searchesBody = document.getElementById("searchesBody");
+          const searchesLoading = document.getElementById("searchesLoading");
+          const searchesEmpty = document.getElementById("searchesEmpty");
+          const searchesTable = document.getElementById("searchesTable");
+
+          searchesLoading.style.display = "none";
+
+          if (stats.topSearches && stats.topSearches.length > 0) {
+            searchesBody.innerHTML = "";
+            stats.topSearches.forEach((search) => {
+              const row = document.createElement("tr");
+              row.innerHTML = `
+                <td><strong>${search.keyword}</strong></td>
+                <td>${search.count}</td>
+              `;
+              searchesBody.appendChild(row);
+            });
+            searchesTable.style.display = "table";
+          } else {
+            searchesEmpty.style.display = "block";
+          }
+
+          // Popular filters
+          const filtersBody = document.getElementById("filtersBody");
+          const filtersLoading = document.getElementById("filtersLoading");
+          const filtersEmpty = document.getElementById("filtersEmpty");
+          const filtersTable = document.getElementById("filtersTable");
+
+          filtersLoading.style.display = "none";
+
+          if (stats.topFilters && stats.topFilters.length > 0) {
+            filtersBody.innerHTML = "";
+            stats.topFilters.forEach((filter) => {
+              const row = document.createElement("tr");
+              row.innerHTML = `
+                <td><strong>${filter.filter}</strong></td>
+                <td>${filter.count}</td>
+              `;
+              filtersBody.appendChild(row);
+            });
+            filtersTable.style.display = "table";
+          } else {
+            filtersEmpty.style.display = "block";
+          }
+
+          // Popular job clicks
+          const clicksBody = document.getElementById("clicksBody");
+          const clicksLoading = document.getElementById("clicksLoading");
+          const clicksEmpty = document.getElementById("clicksEmpty");
+          const clicksTable = document.getElementById("clicksTable");
+
+          clicksLoading.style.display = "none";
+
+          if (stats.topClicks && stats.topClicks.length > 0) {
+            clicksBody.innerHTML = "";
+            stats.topClicks.forEach((click) => {
+              const row = document.createElement("tr");
+              row.innerHTML = `
+                <td><strong>${click.title}</strong></td>
+                <td>${click.company}</td>
+                <td>${click.location}</td>
+                <td>${click.count}</td>
+              `;
+              clicksBody.appendChild(row);
+            });
+            clicksTable.style.display = "table";
+          } else {
+            clicksEmpty.style.display = "block";
+          }
+
+        } catch (error) {
+          console.error("Error loading analytics:", error);
         }
       }
 

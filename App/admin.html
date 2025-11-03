@@ -671,19 +671,24 @@
       }
 
       async function loadJobs() {
+        console.log("=== loadJobs() called ===");
         try {
           const response = await fetch("/api/admin/submitted-jobs");
           const data = await response.json();
+          console.log("Jobs data received:", data);
 
           document.getElementById("jobsLoading").style.display = "none";
 
           if (!data.success || data.jobs.length === 0) {
+            console.log("No jobs found or fetch failed");
             document.getElementById("jobsEmpty").style.display = "block";
             document.getElementById("totalJobs").textContent = "0";
             return;
           }
 
           const jobs = data.jobs;
+          console.log("Processing", jobs.length, "jobs");
+          console.log("First job data:", jobs[0]);
           document.getElementById("totalJobs").textContent = jobs.length;
 
           const tbody = document.getElementById("jobsBody");
@@ -722,10 +727,15 @@
               <td>${date}</td>
             `;
 
-            row.addEventListener("click", () => showJobModal(job));
+            row.addEventListener("click", () => {
+              console.log("=== Row clicked! ===");
+              console.log("Job being passed to modal:", job);
+              showJobModal(job);
+            });
             tbody.appendChild(row);
           });
 
+          console.log("All rows created and event listeners attached");
           document.getElementById("jobsTable").style.display = "table";
         } catch (error) {
           console.error("Error loading jobs:", error);
@@ -735,7 +745,16 @@
       }
 
       function showJobModal(job) {
+        console.log("=== showJobModal() called ===");
+        console.log("Job object received:", job);
+        
         const modal = document.getElementById("jobModal");
+        console.log("Modal element:", modal);
+        
+        if (!modal) {
+          console.error("ERROR: Modal element not found!");
+          return;
+        }
         
         document.getElementById("modalJobTitle").textContent = job.title || "Job Details";
         document.getElementById("modalCompany").textContent = job.company || "-";
@@ -784,23 +803,46 @@
           applyLink.style.display = "none";
         }
         
+        console.log("Adding 'active' class to modal...");
         modal.classList.add("active");
+        console.log("Modal classes after adding active:", modal.className);
         document.body.style.overflow = "hidden";
+        console.log("=== Modal should now be visible ===");
       }
 
       function closeJobModal() {
+        console.log("=== closeJobModal() called ===");
         const modal = document.getElementById("jobModal");
         modal.classList.remove("active");
         document.body.style.overflow = "";
+        console.log("Modal closed");
       }
 
-      document.getElementById("closeModal").addEventListener("click", closeJobModal);
+      console.log("Setting up modal close handlers...");
+      const closeBtn = document.getElementById("closeModal");
+      console.log("Close button element:", closeBtn);
       
-      document.getElementById("jobModal").addEventListener("click", (e) => {
-        if (e.target.id === "jobModal") {
-          closeJobModal();
-        }
-      });
+      if (closeBtn) {
+        closeBtn.addEventListener("click", closeJobModal);
+        console.log("Close button click handler attached");
+      } else {
+        console.error("ERROR: Close button not found!");
+      }
+      
+      const modalOverlay = document.getElementById("jobModal");
+      console.log("Modal overlay element:", modalOverlay);
+      
+      if (modalOverlay) {
+        modalOverlay.addEventListener("click", (e) => {
+          console.log("Modal overlay clicked, target:", e.target.id);
+          if (e.target.id === "jobModal") {
+            closeJobModal();
+          }
+        });
+        console.log("Modal overlay click handler attached");
+      } else {
+        console.error("ERROR: Modal overlay not found!");
+      }
 
       loadSubscribers();
       loadJobs();

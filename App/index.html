@@ -2244,8 +2244,10 @@
         console.log("hasMoreJobs:", hasMoreJobs);
 
         const isNewSearch = page === 1;
-        const filtersSource =
-          filtersOverride ?? activeFilters ?? getCurrentFilters();
+        // For new searches, always get current filters to pick up certification changes
+        const filtersSource = isNewSearch && !filtersOverride
+          ? getCurrentFilters()
+          : (filtersOverride ?? activeFilters ?? getCurrentFilters());
         const filters = normalizeFilters(filtersSource);
 
         if (!activeFilters || isNewSearch || filtersOverride) {

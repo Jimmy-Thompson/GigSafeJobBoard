@@ -2461,9 +2461,17 @@
         let certificationBadges = '';
         if (job.certifications_required) {
           const certs = job.certifications_required.split(',').map(c => c.trim()).filter(Boolean);
-          certificationBadges = certs.map(cert => 
-            `<span class="job-tag cert-tag">${escapeHtml(cert)}</span>`
-          ).join('');
+          certificationBadges = certs.map(cert => {
+            const colors = certificationColors[cert] || defaultTagColor;
+            return `<span class="job-tag cert-tag" style="background-color: ${colors.bg}; color: ${colors.text}; font-weight: 600;">${escapeHtml(cert)}</span>`;
+          }).join('');
+        }
+
+        let vehicleBadge = '';
+        if (job.vehicle_requirements) {
+          const vehicle = job.vehicle_requirements.trim();
+          const colors = vehicleColors[vehicle] || defaultTagColor;
+          vehicleBadge = `<span class="job-tag vehicle-tag" style="background-color: ${colors.bg}; color: ${colors.text}; font-weight: 600;">${escapeHtml(vehicle)}</span>`;
         }
 
         card.innerHTML = `
@@ -2477,7 +2485,7 @@
           </div>
           <div class="job-item-description">${escapeHtml(description)}</div>
           <div class="job-item-tags">
-            ${job.vehicle_requirements ? `<span class="job-tag">${escapeHtml(job.vehicle_requirements)}</span>` : ""}
+            ${vehicleBadge}
             ${certificationBadges}
           </div>
         `;

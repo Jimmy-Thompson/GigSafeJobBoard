@@ -2002,13 +2002,19 @@
       }
 
       function getCurrentFilters() {
-        return normalizeFilters({
+        console.log("🔍 getCurrentFilters() called");
+        console.log("🔍 selectedCertifications array:", selectedCertifications);
+        const rawFilters = {
           keyword: keywordInput?.value,
           state: stateSelect?.value,
           city: citySelect?.value,
           vehicle: vehicleSelect?.value,
           certifications: [...selectedCertifications],
-        });
+        };
+        console.log("🔍 Raw filters before normalize:", rawFilters);
+        const normalized = normalizeFilters(rawFilters);
+        console.log("🔍 Normalized filters:", normalized);
+        return normalized;
       }
 
       function shouldUseFuzzySearch(filters) {

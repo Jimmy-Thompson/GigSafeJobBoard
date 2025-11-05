@@ -2124,13 +2124,15 @@
       // Certifications tag management
       function addCertification(cert) {
         if (!cert || selectedCertifications.includes(cert)) {
+          console.log("⚠️ Cert already selected or invalid:", cert);
           return;
         }
 
-        console.log("Adding certification:", cert);
+        console.log("✅ Adding certification:", cert);
 
         // Add to selected array
         selectedCertifications.push(cert);
+        console.log("✅ selectedCertifications array is now:", selectedCertifications);
 
         // Create tag element
         const tag = document.createElement("div");
@@ -2177,12 +2179,13 @@
       }
 
       function removeCertification(cert) {
-        console.log("Removing certification:", cert);
+        console.log("❌ Removing certification:", cert);
 
         // Remove from selected array
         const index = selectedCertifications.indexOf(cert);
         if (index > -1) {
           selectedCertifications.splice(index, 1);
+          console.log("❌ selectedCertifications array is now:", selectedCertifications);
         }
 
         // Remove tag element
@@ -2206,17 +2209,25 @@
         }
 
         // Auto-trigger search when certification is removed
+        console.log("❌ About to call fetchJobs(1) - AUTO-TRIGGER ON REMOVE");
         fetchJobs(1);
+        console.log("❌ fetchJobs(1) call completed");
       }
 
       // Handle certification selection
       if (certificationsSelect) {
         certificationsSelect.addEventListener("change", (e) => {
+          console.log("🔵 Certification dropdown changed!");
           const cert = e.target.value;
+          console.log("🔵 Selected cert value:", cert);
           if (cert) {
+            console.log("🔵 About to call addCertification()");
             addCertification(cert);
+            console.log("🔵 addCertification() completed");
+            console.log("🔵 About to call fetchJobs(1) - AUTO-TRIGGER");
             // Auto-trigger search when certification is selected
             fetchJobs(1);
+            console.log("🔵 fetchJobs(1) call completed");
           }
         });
       }

@@ -4,7 +4,8 @@
 GigSafe Job Board is a specialized job aggregator for delivery driver and logistics positions, featuring over 1,186 jobs from 10 major companies including Amazon DSP, Airspace, and GoPuff. Its primary purpose is to help delivery drivers and logistics workers efficiently find relevant job opportunities through advanced search, filtering capabilities, and a user-friendly interface. The project aims to be the go-to platform for logistics employment, offering both scraped and user-submitted job listings.
 
 ## Recent Changes (November 5, 2025)
--   **Certification Requirements Feature:** Added support for filtering jobs by required certifications (HIPAA, BPP, TWIC, TSA, STA, HAZMAT). Jobs now display certification badges with purple gradient styling on job cards for easy identification.
+-   **Certification Requirements Feature:** Added support for filtering jobs by required certifications (HIPAA, BPP, TWIC, TSA, STA, HAZMAT). Jobs now display certification badges with consistent color-coded styling on job cards for easy identification.
+-   **Consistent Color-Coded Tags:** Implemented visual color mapping system where each certification and vehicle type gets a specific, consistent color across all job listings. For example, HIPAA is always soft lavender, TSA is always light orange. This enables quick visual scanning without reading every tag.
 -   **Auto-Trigger Search:** Implemented instant search filtering - selecting or removing a certification automatically triggers job search without requiring a manual "Search Jobs" button click for improved UX.
 -   **Database Schema Update:** Added `certifications_required` column to both `master_jobs.db` and `user_jobs.db` to store comma-separated certification requirements.
 -   **Enhanced Filtering:** Updated the certifications filter to search the dedicated `certifications_required` field instead of generic description/benefits fields for more accurate results.

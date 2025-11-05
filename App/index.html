@@ -2247,6 +2247,8 @@
             ...filters,
             certifications: [...filters.certifications],
           };
+          console.log("📊 Active filters set to:", activeFilters);
+          console.log("📊 Certifications in filter:", activeFilters.certifications);
         }
 
         if (isLoading || (!hasMoreJobs && !isNewSearch)) {

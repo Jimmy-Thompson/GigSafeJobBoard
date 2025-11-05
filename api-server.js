@@ -146,11 +146,11 @@ function buildWhereClause(filters, params) {
 
     if (certList.length > 0) {
       const certConditions = certList
-        .map(() => 'description LIKE ? COLLATE NOCASE OR benefits LIKE ? COLLATE NOCASE')
+        .map(() => 'certifications_required LIKE ? COLLATE NOCASE')
         .join(' OR ');
       whereConditions.push(`(${certConditions})`);
       certList.forEach(cert => {
-        params.push(`%${cert}%`, `%${cert}%`);
+        params.push(`%${cert}%`);
       });
     }
   }
@@ -209,6 +209,7 @@ app.get('/api/jobs', (req, res) => {
             benefits,
             vehicle_requirements,
             insurance_requirement,
+            certifications_required,
             schedule_details,
             source_company,
             submitted_at
@@ -229,6 +230,7 @@ app.get('/api/jobs', (req, res) => {
             benefits,
             vehicle_requirements,
             insurance_requirement,
+            certifications_required,
             schedule_details,
             source_company,
             submitted_at
@@ -264,6 +266,7 @@ app.get('/api/jobs', (req, res) => {
             benefits,
             vehicle_requirements,
             insurance_requirement,
+            certifications_required,
             schedule_details,
             source_company,
             submitted_at
@@ -284,6 +287,7 @@ app.get('/api/jobs', (req, res) => {
             benefits,
             vehicle_requirements,
             insurance_requirement,
+            certifications_required,
             schedule_details,
             source_company,
             submitted_at
@@ -354,6 +358,7 @@ app.post('/api/jobs', (req, res) => {
     benefits,
     vehicle_requirements,
     insurance_requirement,
+    certifications_required,
     schedule_details
   } = req.body;
 
@@ -392,10 +397,11 @@ app.post('/api/jobs', (req, res) => {
         benefits,
         vehicle_requirements,
         insurance_requirement,
+        certifications_required,
         schedule_details,
         source_company,
         submitted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       RETURNING *
     `).get(
       job_url,
@@ -410,6 +416,7 @@ app.post('/api/jobs', (req, res) => {
       benefits?.trim() || null,
       vehicle_requirements?.trim() || null,
       insurance_requirement?.trim() || null,
+      certifications_required?.trim() || null,
       schedule_details?.trim() || null,
       company.trim()
     );
@@ -1051,6 +1058,7 @@ function initializeUserJobsDb() {
       benefits TEXT,
       vehicle_requirements TEXT,
       insurance_requirement TEXT,
+      certifications_required TEXT,
       schedule_details TEXT,
       source_company TEXT,
       submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1062,6 +1070,14 @@ function initializeUserJobsDb() {
   try {
     userDb.exec(`ALTER TABLE jobs ADD COLUMN hidden INTEGER DEFAULT 0`);
     console.log('Added hidden column to user jobs table');
+  } catch (error) {
+    // Column already exists, ignore error
+  }
+  
+  // Add certifications_required column if it doesn't exist (migration for existing databases)
+  try {
+    userDb.exec(`ALTER TABLE jobs ADD COLUMN certifications_required TEXT`);
+    console.log('Added certifications_required column to user jobs table');
   } catch (error) {
     // Column already exists, ignore error
   }

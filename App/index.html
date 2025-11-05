@@ -1079,6 +1079,11 @@
         font-size: 0.85rem;
       }
 
+      .cert-tag {
+        background: linear-gradient(135deg, #5B3A9D, #1d8bff);
+        color: white;
+      }
+
       .jobs-empty,
       .jobs-error {
         text-align: center;
@@ -1637,16 +1642,12 @@
                   name="certifications"
                 >
                   <option value="">None</option>
-                  <option value="HIPPA">HIPPA</option>
+                  <option value="HIPAA">HIPAA</option>
                   <option value="BPP">BPP</option>
-                  <option value="STA">STA</option>
-                  <option value="TSA">TSA</option>
                   <option value="TWIC">TWIC</option>
-                  <option value="CDA">CDA</option>
-                  <option value="NSA">NSA</option>
-                  <option value="CIA">CIA</option>
-                  <option value="FBI">FBI</option>
-                  <option value="PBS">PBS</option>
+                  <option value="TSA">TSA</option>
+                  <option value="STA">STA</option>
+                  <option value="HAZMAT">HAZMAT</option>
                 </select>
               </div>
               <div class="search-actions">
@@ -2418,6 +2419,14 @@
           "Location not specified";
         const description = job.description || "No description available";
 
+        let certificationBadges = '';
+        if (job.certifications_required) {
+          const certs = job.certifications_required.split(',').map(c => c.trim()).filter(Boolean);
+          certificationBadges = certs.map(cert => 
+            `<span class="job-tag cert-tag">${escapeHtml(cert)}</span>`
+          ).join('');
+        }
+
         card.innerHTML = `
           <div class="job-item-header">
             <div>
@@ -2430,6 +2439,7 @@
           <div class="job-item-description">${escapeHtml(description)}</div>
           <div class="job-item-tags">
             ${job.vehicle_requirements ? `<span class="job-tag">${escapeHtml(job.vehicle_requirements)}</span>` : ""}
+            ${certificationBadges}
           </div>
         `;
 

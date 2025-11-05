@@ -21,13 +21,13 @@ args = "gigsafe-app"
 name = "gigsafe-app"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npm start"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node api-server.js"
+waitForPort = 5000
 
 [[ports]]
 localPort = 3000
@@ -36,10 +36,6 @@ externalPort = 3000
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 35893
-externalPort = 3001
 
 [deployment]
 deploymentTarget = "autoscale"

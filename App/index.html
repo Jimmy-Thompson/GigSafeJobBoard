@@ -1978,7 +1978,7 @@
 
       // Certifications data
       const selectedCertifications = [];
-      
+
       // Consistent color mapping for certifications
       const certificationColors = {
         'HIPAA': { bg: '#E8D5F2', text: '#6B3FA0' },      // Soft lavender (medical/health)
@@ -1988,7 +1988,7 @@
         'STA': { bg: '#D5F7E8', text: '#2E8A5C' },        // Soft green (aviation/security)
         'HAZMAT': { bg: '#FFD5D5', text: '#CC4040' }      // Light coral (caution/safety)
       };
-      
+
       // Consistent color mapping for vehicle types
       const vehicleColors = {
         'Car': { bg: '#E3F2FD', text: '#1565C0' },        // Light blue
@@ -2001,7 +2001,7 @@
         'Cargo Van': { bg: '#E1BEE7', text: '#6A1B9A' },  // Light deep purple
         'Sprinter Van': { bg: '#D1C4E9', text: '#512DA8' } // Light indigo
       };
-      
+
       // Fallback colors for unknown types
       const defaultTagColor = { bg: '#F5F5F5', text: '#616161' };
 
@@ -2129,13 +2129,13 @@
       if (citySelect) {
         citySelect.addEventListener("change", () => {
           console.log("City changed to:", citySelect.value || "Any");
-          
+
           // Track filter change
           trackEvent('filter_change', {
             filter_type: 'city',
             value: citySelect.value || 'Any'
           });
-          
+
           // Trigger search with new city filter
           triggerSearch();
         });
@@ -2145,13 +2145,13 @@
       if (vehicleSelect) {
         vehicleSelect.addEventListener("change", () => {
           console.log("Vehicle changed to:", vehicleSelect.value || "Any");
-          
+
           // Track filter change
           trackEvent('filter_change', {
             filter_type: 'vehicle',
             value: vehicleSelect.value || 'Any'
           });
-          
+
           // Trigger search with new vehicle filter
           triggerSearch();
         });
@@ -2470,6 +2470,13 @@
           window.open(job.job_url, "_blank");
         };
 
+        // Apply gold styling and sash if user-submitted
+        if (job.is_user_submitted) {
+          card.classList.add("job-item--user-submitted"); // Add a class for potential future styling
+          card.dataset.userSubmitted = "true"; // Add a data attribute for CSS targeting
+        }
+
+
         const location =
           [job.city, job.state].filter(Boolean).join(", ") ||
           "Location not specified";
@@ -2526,7 +2533,7 @@
 
         // Check if we're on mobile (no max-height on scroll area)
         const isMobile = window.innerWidth <= 768;
-        
+
         // On mobile, use viewport (root: null) for scrolling detection
         // On desktop, use the scroll area container
         const observerOptions = isMobile
@@ -2609,7 +2616,7 @@
         console.log("Search triggered!");
 
         const filters = getCurrentFilters();
-        
+
         // Track analytics - search or filter
         if (filters.keyword) {
           trackEvent('search', { keyword: filters.keyword });
@@ -2621,7 +2628,7 @@
             vehicle: filters.vehicle 
           });
         }
-        
+
         const useFuzzy = shouldUseFuzzySearch(filters);
 
         if (useFuzzy) {
@@ -2970,7 +2977,7 @@
               );
 
               console.log("Response received:", response.status, response.statusText);
-              
+
               const result = await response.json();
               console.log("Response body:", result);
 

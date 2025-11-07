@@ -1012,21 +1012,6 @@
         box-shadow: var(--shadow-card);
       }
 
-      /* Special gold styling for user-submitted jobs */
-      .job-item[data-user-submitted="true"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 32px rgba(218, 165, 32, 0.3), 
-                    0 0 20px rgba(218, 165, 32, 0.2);
-        border: 1px solid rgba(218, 165, 32, 0.3);
-      }
-
-      /* Optional: subtle gold tint on the card background */
-      .job-item[data-user-submitted="true"] {
-        background: linear-gradient(135deg, 
-          rgba(255, 255, 255, 1) 0%, 
-          rgba(255, 250, 240, 1) 100%);
-      }
-
       .job-item-header {
         display: flex;
         justify-content: space-between;
@@ -2460,12 +2445,6 @@
       function createJobCard(job) {
         const card = document.createElement("div");
         card.className = "job-item";
-        
-        // Add special attribute for user-submitted jobs
-        if (job.submitted_at) {
-          card.setAttribute('data-user-submitted', 'true');
-        }
-        
         card.onclick = () => {
           // Track job click with Posthog
           if (typeof posthog !== "undefined") {

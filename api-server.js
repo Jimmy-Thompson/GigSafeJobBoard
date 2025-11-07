@@ -83,6 +83,9 @@ app.use(express.static('App', {
   extensions: ['html']
 }));
 
+// Serve attached assets (images, logos, etc.)
+app.use('/attached_assets', express.static('attached_assets'));
+
 // Middleware to check admin authentication
 const requireAdmin = (req, res, next) => {
   if (req.session && req.session.isAdmin) {

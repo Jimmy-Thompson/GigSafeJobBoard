@@ -25,3 +25,6 @@ Thumbs.db
 # User uploads (keep directory structure, ignore content)
 uploads/certifications/*
 !uploads/certifications/.gitkeep
+
+# Database and session files (sensitive data)
+outputs/

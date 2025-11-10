@@ -139,8 +139,11 @@ if (process.env.REPLIT_DEPLOYMENT === '1' && process.env.REPLIT_DOMAINS) {
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    // Reject requests with no origin for security (prevents curl/script abuse)
+    if (!origin) {
+      logSecurityEvent('CORS_BLOCKED_NO_ORIGIN', { ip: 'unknown' });
+      return callback(new Error('Origin header required'));
+    }
     
     if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
       callback(null, true);
@@ -224,6 +227,20 @@ if (!sessionSecret) {
   console.error('FATAL: ADMIN_SESSION_SECRET environment variable is not set.');
   console.error('The admin portal requires a strong session secret for security.');
   console.error('Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  process.exit(1);
+}
+
+// Validate admin password strength at startup
+const adminPassword = process.env.ADMIN_PASSWORD;
+if (!adminPassword) {
+  console.error('FATAL: ADMIN_PASSWORD environment variable is not set.');
+  console.error('The admin portal requires a password for security.');
+  process.exit(1);
+}
+if (adminPassword.length < 8) {
+  console.error('FATAL: ADMIN_PASSWORD must be at least 8 characters long.');
+  console.error(`Current password length: ${adminPassword.length} characters`);
+  console.error('Please set a stronger password in your environment variables.');
   process.exit(1);
 }
 

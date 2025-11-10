@@ -137,25 +137,40 @@ if (process.env.REPLIT_DEPLOYMENT === '1' && process.env.REPLIT_DOMAINS) {
   allowedOrigins.push(...replitDomains);
 }
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // Reject requests with no origin for security (prevents curl/script abuse)
-    if (!origin) {
-      logSecurityEvent('CORS_BLOCKED_NO_ORIGIN', { ip: 'unknown' });
-      return callback(new Error('Origin header required'));
+// CORS middleware for API routes only - balanced security
+const apiCorsMiddleware = (req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // If origin header is present, validate it
+  if (origin) {
+    if (allowedOrigins.indexOf(origin) === -1 && !allowedOrigins.includes('*')) {
+      logSecurityEvent('CORS_BLOCKED', { origin });
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Not allowed by CORS' 
+      });
     }
     
-    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
-      callback(null, true);
-    } else {
-      logSecurityEvent('CORS_BLOCKED', { origin });
-      callback(new Error('Not allowed by CORS'));
+    // Set CORS headers for allowed origin
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // Handle preflight
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
     }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+  }
+  // Note: If no origin header (same-origin requests), allow through
+  // Other security layers protect against abuse: rate limiting, authentication, input validation
+  
+  next();
+};
+
+// Apply CORS middleware ONLY to /api routes (not static files)
+// This allows browsers to load HTML/JS without Origin header while protecting API endpoints
+app.use('/api', apiCorsMiddleware);
 
 app.use(express.json({ limit: '1mb' })); // Limit request body size
 

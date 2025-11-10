@@ -5,6 +5,13 @@ GigSafe Job Board is a specialized job aggregator for delivery driver and logist
 
 ## Recent Changes
 
+### November 10, 2025
+-   **Production Security Hardening:** Implemented comprehensive security improvements for production launch:
+    -   **Database Protection:** Added `outputs/` directory to `.gitignore` to prevent accidental commit of sensitive data (sessions.db, user_jobs.db, master_jobs.db)
+    -   **Password Validation:** Added startup validation requiring minimum 8 characters for ADMIN_PASSWORD environment variable
+    -   **CORS Configuration:** Implemented custom CORS middleware applied only to `/api/*` routes. Validates Origin header when present against allowlist, allows same-origin requests without Origin header (browser standard behavior). Relies on rate limiting, authentication, and input validation for comprehensive security.
+    -   **Security Logging:** All CORS violations and suspicious activity logged to `logs/security.log`
+
 ### November 7, 2025
 -   **Gold Sash Fix:** Fixed the gold corner sash/banner that appears on user-submitted job tiles. The frontend was checking for `job.is_user_submitted` but the API returns `job.submitted_at`, causing the sash to never appear. Updated the condition to check for `job.submitted_at` instead.
 -   **CSS Error Fix:** Corrected CSS syntax error in testimonial card pseudo-element where a curly quote character was used instead of a straight quote, which was causing LSP parsing errors.

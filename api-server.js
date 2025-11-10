@@ -2,6 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import session from 'express-session';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import createDOMPurify from 'dompurify';
+import { JSDOM } from 'jsdom';
+import sqliteStoreFactory from 'connect-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -13,6 +18,28 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5000;
+
+// Initialize DOMPurify for server-side XSS protection
+const window = new JSDOM('').window;
+const DOMPurify = createDOMPurify(window);
+
+// Security logging function
+function logSecurityEvent(eventType, details) {
+  const timestamp = new Date().toISOString();
+  const logEntry = `[SECURITY] ${timestamp} - ${eventType}: ${JSON.stringify(details)}`;
+  console.log(logEntry);
+  
+  // Also write to security log file
+  const logDir = path.join(__dirname, 'logs');
+  fs.mkdirSync(logDir, { recursive: true });
+  const logFile = path.join(logDir, 'security.log');
+  fs.appendFileSync(logFile, logEntry + '\n');
+}
+
+// Failed login tracking (in-memory, could be moved to database for persistence)
+const loginAttempts = new Map();
+const LOGIN_ATTEMPT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const MAX_LOGIN_ATTEMPTS = 5;
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -29,25 +56,139 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit per file
+  limits: { 
+    fileSize: 10 * 1024 * 1024, // 10MB limit per file
+    files: 10 // Max 10 files
+  },
   fileFilter: (req, file, cb) => {
-    // Allow images and PDFs
-    const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
+    // Strict file type validation
+    const allowedMimeTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    
+    const allowedExtensions = /\.(jpe?g|png|gif|pdf|doc|docx)$/i;
+    
+    if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.test(file.originalname)) {
       return cb(null, true);
     } else {
+      logSecurityEvent('FILE_UPLOAD_REJECTED', { 
+        filename: file.originalname, 
+        mimetype: file.mimetype 
+      });
       cb(new Error('Only images, PDFs, and Word documents are allowed'));
     }
   }
 });
 
-app.use(cors());
-app.use(express.json());
+// Security Headers with Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
 
-// Session management for admin authentication
+// CORS Configuration - Restrict to your actual domains
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',') 
+  : ['http://localhost:5000', 'http://localhost:8000'];
+
+// In production, add your actual domain
+if (process.env.REPLIT_DEPLOYMENT === '1' && process.env.REPLIT_DOMAINS) {
+  const replitDomains = process.env.REPLIT_DOMAINS.split(',').map(d => `https://${d}`);
+  allowedOrigins.push(...replitDomains);
+}
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      logSecurityEvent('CORS_BLOCKED', { origin });
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(express.json({ limit: '1mb' })); // Limit request body size
+
+// Trust proxy for accurate IP addresses behind reverse proxy
+app.set('trust proxy', 1);
+
+// Rate Limiters
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: { success: false, error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes  
+  max: 20, // Stricter limit for sensitive operations
+  message: { success: false, error: 'Too many requests, please try again later.' },
+  skipSuccessfulRequests: true,
+});
+
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Only 5 login attempts per 15 minutes
+  message: { success: false, error: 'Too many login attempts, please try again later.' },
+  skipSuccessfulRequests: true,
+  handler: (req, res) => {
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', { 
+      endpoint: '/api/admin/login',
+      ip: req.ip 
+    });
+    res.status(429).json({ 
+      success: false, 
+      error: 'Too many login attempts, please try again later.' 
+    });
+  }
+});
+
+const jobPostingLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Max 5 job postings per hour per IP
+  message: { success: false, error: 'Too many job postings, please try again later.' },
+  skipSuccessfulRequests: false,
+});
+
+const subscriptionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Max 3 subscriptions per hour per IP
+  message: { success: false, error: 'Too many subscription attempts, please try again later.' },
+  skipSuccessfulRequests: true,
+});
+
+// Apply general rate limiter to all routes
+app.use(generalLimiter);
+
+// Session management with persistent SQLite store
 const sessionSecret = process.env.ADMIN_SESSION_SECRET;
 if (!sessionSecret) {
   console.error('FATAL: ADMIN_SESSION_SECRET environment variable is not set.');
@@ -56,16 +197,23 @@ if (!sessionSecret) {
   process.exit(1);
 }
 
+const SQLiteStore = sqliteStoreFactory(session);
 app.use(session({
+  store: new SQLiteStore({
+    db: 'sessions.db',
+    dir: path.join(__dirname, 'outputs'),
+    table: 'sessions'
+  }),
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // Secure cookies in production
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'strict',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
+    maxAge: 8 * 60 * 60 * 1000 // 8 hours (reduced from 24)
+  },
+  name: 'sessionId' // Don't use default name
 }));
 
 app.use((req, res, next) => {
@@ -86,11 +234,59 @@ app.use(express.static('App', {
 // Serve attached assets (images, logos, etc.)
 app.use('/attached_assets', express.static('attached_assets'));
 
+// Sanitization helper functions
+function sanitizeText(text, maxLength = 10000) {
+  if (!text || typeof text !== 'string') return text;
+  const trimmed = text.trim().substring(0, maxLength);
+  return DOMPurify.sanitize(trimmed, { 
+    ALLOWED_TAGS: [], 
+    ALLOWED_ATTR: [] 
+  });
+}
+
+function sanitizeHTML(html, maxLength = 50000) {
+  if (!html || typeof html !== 'string') return html;
+  const trimmed = html.trim().substring(0, maxLength);
+  return DOMPurify.sanitize(trimmed, {
+    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li'],
+    ALLOWED_ATTR: []
+  });
+}
+
+function validateEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// Helper to check if IP is locked out
+function isIpLockedOut(ip) {
+  const attempts = loginAttempts.get(ip);
+  if (!attempts) return false;
+  
+  const now = Date.now();
+  // Remove old attempts
+  const recentAttempts = attempts.filter(time => now - time < LOGIN_ATTEMPT_WINDOW);
+  loginAttempts.set(ip, recentAttempts);
+  
+  return recentAttempts.length >= MAX_LOGIN_ATTEMPTS;
+}
+
+// Helper to record failed login
+function recordFailedLogin(ip) {
+  const attempts = loginAttempts.get(ip) || [];
+  attempts.push(Date.now());
+  loginAttempts.set(ip, attempts);
+}
+
 // Middleware to check admin authentication
 const requireAdmin = (req, res, next) => {
   if (req.session && req.session.isAdmin) {
     return next();
   }
+  logSecurityEvent('UNAUTHORIZED_ACCESS_ATTEMPT', { 
+    endpoint: req.path,
+    ip: req.ip 
+  });
   res.status(401).json({
     success: false,
     error: 'Unauthorized - Admin access required'
@@ -347,7 +543,7 @@ app.get('/api/jobs', (req, res) => {
   }
 });
 
-app.post('/api/jobs', (req, res) => {
+app.post('/api/jobs', jobPostingLimiter, (req, res) => {
   const {
     job_url,
     title,
@@ -373,15 +569,36 @@ app.post('/api/jobs', (req, res) => {
     });
   }
 
-  // Validate URL format
+  // Validate and sanitize URL
+  let validatedUrl;
   try {
-    new URL(job_url);
+    const urlObj = new URL(job_url);
+    // Only allow http and https protocols
+    if (!['http:', 'https:'].includes(urlObj.protocol)) {
+      throw new Error('Invalid protocol');
+    }
+    validatedUrl = urlObj.toString();
   } catch {
     return res.status(400).json({
       success: false,
-      error: 'Invalid job_url format'
+      error: 'Invalid job_url format. Must be a valid HTTP or HTTPS URL.'
     });
   }
+
+  // Sanitize all text inputs to prevent XSS
+  const sanitizedTitle = sanitizeText(title, 200);
+  const sanitizedCompany = sanitizeText(company, 200);
+  const sanitizedCity = sanitizeText(city, 100);
+  const sanitizedState = sanitizeText(state, 2).toUpperCase();
+  const sanitizedAddress = address ? sanitizeText(address, 300) : null;
+  const sanitizedDescription = sanitizeHTML(description, 10000);
+  const sanitizedRequirements = general_requirements ? sanitizeHTML(general_requirements, 5000) : null;
+  const sanitizedPay = sanitizeText(pay, 200);
+  const sanitizedBenefits = benefits ? sanitizeHTML(benefits, 5000) : null;
+  const sanitizedVehicle = vehicle_requirements ? sanitizeText(vehicle_requirements, 200) : null;
+  const sanitizedInsurance = insurance_requirement ? sanitizeText(insurance_requirement, 200) : null;
+  const sanitizedCerts = certifications_required ? sanitizeText(certifications_required, 500) : null;
+  const sanitizedSchedule = schedule_details ? sanitizeHTML(schedule_details, 2000) : null;
 
   const userDb = getUserDb();
 
@@ -407,22 +624,28 @@ app.post('/api/jobs', (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       RETURNING *
     `).get(
-      job_url,
-      title.trim(),
-      company.trim(),
-      city.trim(),
-      state.trim().toUpperCase(),
-      address?.trim() || null,
-      description.trim(),
-      general_requirements?.trim() || null,
-      pay.trim(),
-      benefits?.trim() || null,
-      vehicle_requirements?.trim() || null,
-      insurance_requirement?.trim() || null,
-      certifications_required?.trim() || null,
-      schedule_details?.trim() || null,
-      company.trim()
+      validatedUrl,
+      sanitizedTitle,
+      sanitizedCompany,
+      sanitizedCity,
+      sanitizedState,
+      sanitizedAddress,
+      sanitizedDescription,
+      sanitizedRequirements,
+      sanitizedPay,
+      sanitizedBenefits,
+      sanitizedVehicle,
+      sanitizedInsurance,
+      sanitizedCerts,
+      sanitizedSchedule,
+      sanitizedCompany
     );
+
+    logSecurityEvent('JOB_POSTED', { 
+      ip: req.ip, 
+      jobId: result.id,
+      company: sanitizedCompany 
+    });
 
     res.json({
       success: true,
@@ -515,6 +738,12 @@ app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
       });
     }
 
+    logSecurityEvent('ADMIN_JOB_VISIBILITY_CHANGED', {
+      ip: req.ip,
+      jobId,
+      action: newHiddenStatus ? 'hide' : 'unhide'
+    });
+
     res.json({
       success: true,
       message: newHiddenStatus ? 'Job hidden successfully' : 'Job unhidden successfully',
@@ -529,7 +758,7 @@ app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
   }
 });
 
-app.post('/api/subscribe', upload.array('certifications', 10), (req, res) => {
+app.post('/api/subscribe', subscriptionLimiter, upload.array('certifications', 10), (req, res) => {
   console.log('======================================');
   console.log('SUBSCRIBE REQUEST RECEIVED');
   console.log('======================================');
@@ -550,7 +779,8 @@ app.post('/api/subscribe', upload.array('certifications', 10), (req, res) => {
 
   console.log('Extracted fields:', { email, firstName, lastName, city, state, sourceTag });
 
-  if (!email || typeof email !== 'string' || !email.includes('@')) {
+  // Improved email validation
+  if (!email || typeof email !== 'string' || !validateEmail(email)) {
     console.log('ERROR: Invalid email');
     return res.status(400).json({
       success: false,
@@ -558,12 +788,13 @@ app.post('/api/subscribe', upload.array('certifications', 10), (req, res) => {
     });
   }
 
-  const sanitizedEmail = email.trim().toLowerCase();
-  const tag = typeof sourceTag === 'string' ? sourceTag.trim() || null : null;
-  const first = typeof firstName === 'string' && firstName.trim() ? firstName.trim() : null;
-  const last = typeof lastName === 'string' && lastName.trim() ? lastName.trim() : null;
-  const cityValue = typeof city === 'string' && city.trim() ? city.trim() : null;
-  const stateValue = typeof state === 'string' && state.trim() ? state.trim() : null;
+  // Sanitize all inputs
+  const sanitizedEmail = sanitizeText(email, 255).toLowerCase();
+  const tag = typeof sourceTag === 'string' ? sanitizeText(sourceTag, 100) : null;
+  const first = typeof firstName === 'string' && firstName.trim() ? sanitizeText(firstName, 100) : null;
+  const last = typeof lastName === 'string' && lastName.trim() ? sanitizeText(lastName, 100) : null;
+  const cityValue = typeof city === 'string' && city.trim() ? sanitizeText(city, 100) : null;
+  const stateValue = typeof state === 'string' && state.trim() ? sanitizeText(state, 50) : null;
 
   console.log('Sanitized values:', { sanitizedEmail, first, last, cityValue, stateValue, tag });
 
@@ -623,6 +854,13 @@ app.post('/api/subscribe', upload.array('certifications', 10), (req, res) => {
 
     console.log('Transaction committed successfully');
     console.log('======================================');
+    
+    logSecurityEvent('SUBSCRIPTION_CREATED', {
+      ip: req.ip,
+      email: sanitizedEmail,
+      filesCount: req.files ? req.files.length : 0
+    });
+    
     res.json({
       success: true,
       message: 'Subscribed successfully',
@@ -665,10 +903,30 @@ app.post('/api/analytics', (req, res) => {
     });
   }
 
+  // Validate session_id format (should be a UUID or similar)
+  if (typeof session_id !== 'string' || session_id.length > 100) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid session_id'
+    });
+  }
+
+  // Limit event_data size to prevent abuse
+  let eventDataString = null;
+  if (event_data) {
+    eventDataString = JSON.stringify(event_data);
+    if (eventDataString.length > 5000) { // 5KB limit
+      return res.status(400).json({
+        success: false,
+        error: 'event_data is too large'
+      });
+    }
+  }
+
   const db = getDb();
 
   try {
-    // Optional: Hash IP for privacy (simple hash)
+    // Hash IP for privacy
     const ipHash = req.ip ? 
       crypto.createHash('sha256').update(req.ip).digest('hex').substring(0, 16) : 
       null;
@@ -677,8 +935,8 @@ app.post('/api/analytics', (req, res) => {
       INSERT INTO analytics_events (event_type, event_data, session_id, ip_hash)
       VALUES (?, ?, ?, ?)
     `).run(
-      event_type,
-      event_data ? JSON.stringify(event_data) : null,
+      sanitizeText(event_type, 50),
+      eventDataString,
       session_id,
       ipHash
     );
@@ -693,10 +951,11 @@ app.post('/api/analytics', (req, res) => {
   }
 });
 
-// Admin login endpoint
-app.post('/api/admin/login', (req, res) => {
+// Admin login endpoint with brute force protection
+app.post('/api/admin/login', adminLoginLimiter, (req, res) => {
   const { password } = req.body;
   const adminPassword = process.env.ADMIN_PASSWORD;
+  const clientIp = req.ip;
 
   if (!adminPassword) {
     console.error('ADMIN_PASSWORD not configured');
@@ -706,22 +965,66 @@ app.post('/api/admin/login', (req, res) => {
     });
   }
 
-  if (password === adminPassword) {
+  // Check if IP is locked out
+  if (isIpLockedOut(clientIp)) {
+    logSecurityEvent('LOGIN_BLOCKED_LOCKED_OUT', { ip: clientIp });
+    return res.status(429).json({
+      success: false,
+      error: 'Too many failed login attempts. Please try again in 15 minutes.'
+    });
+  }
+
+  // Validate password exists and is string
+  if (!password || typeof password !== 'string') {
+    recordFailedLogin(clientIp);
+    logSecurityEvent('LOGIN_FAILED_INVALID_INPUT', { ip: clientIp });
+    return res.status(400).json({
+      success: false,
+      error: 'Password is required'
+    });
+  }
+
+  // Use timing-safe comparison to prevent timing attacks
+  const passwordBuffer = Buffer.from(password);
+  const adminPasswordBuffer = Buffer.from(adminPassword);
+  
+  // Make buffers same length for timing-safe comparison
+  const maxLength = Math.max(passwordBuffer.length, adminPasswordBuffer.length);
+  const paddedPassword = Buffer.alloc(maxLength);
+  const paddedAdminPassword = Buffer.alloc(maxLength);
+  passwordBuffer.copy(paddedPassword);
+  adminPasswordBuffer.copy(paddedAdminPassword);
+
+  if (crypto.timingSafeEqual(paddedPassword, paddedAdminPassword)) {
+    // Clear failed attempts on successful login
+    loginAttempts.delete(clientIp);
+    
     req.session.isAdmin = true;
+    req.session.loginTime = Date.now();
+    req.session.ip = clientIp;
+    
+    logSecurityEvent('ADMIN_LOGIN_SUCCESS', { ip: clientIp });
+    
     res.json({
       success: true,
       message: 'Login successful'
     });
   } else {
+    recordFailedLogin(clientIp);
+    logSecurityEvent('LOGIN_FAILED_WRONG_PASSWORD', { ip: clientIp });
+    
+    // Generic error message to not reveal if password was close
     res.status(401).json({
       success: false,
-      error: 'Invalid password'
+      error: 'Invalid credentials'
     });
   }
 });
 
 // Admin logout endpoint
 app.post('/api/admin/logout', (req, res) => {
+  const wasAdmin = req.session && req.session.isAdmin;
+  
   req.session.destroy((err) => {
     if (err) {
       return res.status(500).json({
@@ -729,6 +1032,11 @@ app.post('/api/admin/logout', (req, res) => {
         error: 'Failed to logout'
       });
     }
+    
+    if (wasAdmin) {
+      logSecurityEvent('ADMIN_LOGOUT', { ip: req.ip });
+    }
+    
     res.json({
       success: true,
       message: 'Logged out successfully'

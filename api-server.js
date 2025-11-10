@@ -260,6 +260,19 @@ if (adminPassword.length < 8) {
 }
 
 const SQLiteStore = sqliteStoreFactory(session);
+
+// Determine if we should use secure cookies (HTTPS only)
+// Secure cookies on Replit deployment OR when NODE_ENV=production
+const useSecureCookies = process.env.NODE_ENV === 'production' || 
+                          process.env.REPLIT_DEPLOYMENT === '1' || 
+                          isReplit;
+
+if (useSecureCookies) {
+  console.log('Secure cookies enabled (HTTPS-only admin sessions)');
+} else {
+  console.warn('WARNING: Secure cookies disabled (development mode - not safe for production)');
+}
+
 app.use(session({
   store: new SQLiteStore({
     db: 'sessions.db',
@@ -270,7 +283,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: useSecureCookies,
     httpOnly: true,
     sameSite: 'strict',
     maxAge: 8 * 60 * 60 * 1000 // 8 hours (reduced from 24)

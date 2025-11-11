@@ -1402,6 +1402,147 @@ app.get('/api/admin/analytics', requireAdmin, (req, res) => {
   }
 });
 
+// Protected: Get individual job analytics
+app.get('/api/admin/analytics/job/:jobId', requireAdmin, (req, res) => {
+  const db = getDb();
+  const { jobId } = req.params;
+  const timeRange = req.query.timeRange || '24h';
+
+  try {
+    // Helper function to get date filter SQL based on time range
+    const getDateFilter = (range) => {
+      switch (range) {
+        case '24h':
+          return "AND created_at >= datetime('now', '-24 hours')";
+        case '7days':
+          return "AND created_at >= datetime('now', '-7 days')";
+        case '30days':
+          return "AND created_at >= datetime('now', '-30 days')";
+        case 'all':
+        default:
+          return '';
+      }
+    };
+
+    const dateFilter = getDateFilter(timeRange);
+
+    // Get job details from both databases
+    let jobDetails = null;
+    try {
+      jobDetails = db.prepare(`
+        SELECT id, title, company, city, state
+        FROM jobs
+        WHERE id = ?
+      `).get(jobId);
+    } catch (e) {
+      // Try user_jobs database
+      const userDb = getUserJobsDb();
+      jobDetails = userDb.prepare(`
+        SELECT id, title, company, city, state
+        FROM jobs
+        WHERE id = ?
+      `).get(jobId);
+    }
+
+    if (!jobDetails) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found'
+      });
+    }
+
+    // Get total views (job_impression events)
+    const totalViews = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM analytics_events
+      WHERE event_type = 'job_impression'
+      AND json_extract(event_data, '$.job_id') = ?
+      ${dateFilter}
+    `).get(jobId);
+
+    // Get total clicks (job_click events)
+    const totalClicks = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM analytics_events
+      WHERE event_type = 'job_click'
+      AND json_extract(event_data, '$.job_id') = ?
+      ${dateFilter}
+    `).get(jobId);
+
+    // Calculate CTR
+    const views = totalViews.count || 0;
+    const clicks = totalClicks.count || 0;
+    const ctr = views > 0 ? ((clicks / views) * 100).toFixed(2) : 0;
+
+    // Get timeline data (views and clicks by date)
+    const viewsTimeline = db.prepare(`
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as count
+      FROM analytics_events
+      WHERE event_type = 'job_impression'
+      AND json_extract(event_data, '$.job_id') = ?
+      ${dateFilter}
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `).all(jobId);
+
+    const clicksTimeline = db.prepare(`
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as count
+      FROM analytics_events
+      WHERE event_type = 'job_click'
+      AND json_extract(event_data, '$.job_id') = ?
+      ${dateFilter}
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `).all(jobId);
+
+    // Merge timelines (ensure all dates have both views and clicks data)
+    const dateMap = new Map();
+    
+    viewsTimeline.forEach(item => {
+      dateMap.set(item.date, { date: item.date, views: item.count, clicks: 0 });
+    });
+    
+    clicksTimeline.forEach(item => {
+      if (dateMap.has(item.date)) {
+        dateMap.get(item.date).clicks = item.count;
+      } else {
+        dateMap.set(item.date, { date: item.date, views: 0, clicks: item.count });
+      }
+    });
+
+    const timeline = Array.from(dateMap.values()).sort((a, b) => 
+      new Date(a.date) - new Date(b.date)
+    );
+
+    res.json({
+      success: true,
+      job: {
+        id: jobDetails.id,
+        title: jobDetails.title,
+        company: jobDetails.company,
+        location: `${jobDetails.city}, ${jobDetails.state}`
+      },
+      summary: {
+        totalViews: views,
+        totalClicks: clicks,
+        clickThroughRate: parseFloat(ctr)
+      },
+      timeline: timeline
+    });
+
+  } catch (error) {
+    console.error('Error fetching job analytics:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch job analytics'
+    });
+  }
+});
+
 // Protected: Download certification file
 app.get('/api/admin/download/:certId', requireAdmin, (req, res) => {
   const { certId } = req.params;

@@ -1937,6 +1937,123 @@
         }
       })();
 
+      // Job Impression Tracking System
+      (function() {
+        let impressionBatch = [];
+        let impressionBatchTimer = null;
+        const BATCH_INTERVAL = 5000; // Send batch every 5 seconds
+        const MAX_BATCH_SIZE = 20; // Max 20 impressions per batch
+        
+        // Get or create impression tracking set for this session
+        let trackedImpressions = new Set();
+        try {
+          const stored = sessionStorage.getItem('tracked_job_impressions');
+          if (stored) {
+            trackedImpressions = new Set(JSON.parse(stored));
+          }
+        } catch (e) {
+          console.warn('Failed to load tracked impressions:', e);
+        }
+
+        // Save tracked impressions to session storage
+        function saveTrackedImpressions() {
+          try {
+            sessionStorage.setItem('tracked_job_impressions', 
+              JSON.stringify(Array.from(trackedImpressions)));
+          } catch (e) {
+            console.warn('Failed to save tracked impressions:', e);
+          }
+        }
+
+        // Send batch of impressions to server
+        function sendImpressionBatch() {
+          if (impressionBatch.length === 0) return;
+
+          const batch = [...impressionBatch];
+          impressionBatch = [];
+
+          // Send all impressions in batch
+          batch.forEach(impression => {
+            trackEvent('job_impression', impression);
+          });
+
+          console.log(`Sent ${batch.length} job impressions`);
+        }
+
+        // Track a job impression
+        window.trackJobImpression = function(jobId, jobTitle, jobCompany, jobLocation) {
+          // De-duplicate: only track once per session
+          if (trackedImpressions.has(jobId)) {
+            return;
+          }
+
+          trackedImpressions.add(jobId);
+          saveTrackedImpressions();
+
+          // Add to batch
+          impressionBatch.push({
+            job_id: jobId,
+            title: jobTitle,
+            company: jobCompany,
+            location: jobLocation
+          });
+
+          // If batch is full, send immediately
+          if (impressionBatch.length >= MAX_BATCH_SIZE) {
+            clearTimeout(impressionBatchTimer);
+            sendImpressionBatch();
+          } else {
+            // Otherwise, schedule batch send
+            clearTimeout(impressionBatchTimer);
+            impressionBatchTimer = setTimeout(sendImpressionBatch, BATCH_INTERVAL);
+          }
+        };
+
+        // Intersection Observer for tracking job card visibility
+        let jobImpressionObserver = null;
+
+        window.initJobImpressionTracking = function() {
+          // Disconnect existing observer
+          if (jobImpressionObserver) {
+            jobImpressionObserver.disconnect();
+          }
+
+          // Create new observer
+          jobImpressionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              // Only track if card is 50% visible
+              if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+                const card = entry.target;
+                const jobId = card.dataset.jobId;
+                const jobTitle = card.querySelector('.job-item-title')?.textContent || '';
+                const jobCompany = card.querySelector('.job-item-company')?.textContent || '';
+                const jobLocation = card.querySelector('.job-item-location')?.textContent || '';
+
+                if (jobId) {
+                  trackJobImpression(jobId, jobTitle, jobCompany, jobLocation);
+                  // Stop observing this card after tracking
+                  jobImpressionObserver.unobserve(card);
+                }
+              }
+            });
+          }, {
+            threshold: [0.5], // Track when 50% visible
+            rootMargin: '0px'
+          });
+
+          // Observe all job cards
+          const jobCards = document.querySelectorAll('.job-item[data-job-id]');
+          jobCards.forEach(card => {
+            jobImpressionObserver.observe(card);
+          });
+        };
+
+        // Send any remaining impressions before page unload
+        window.addEventListener('beforeunload', () => {
+          sendImpressionBatch();
+        });
+      })();
+
       // Jobs infinite scroll functionality
       console.log("==============================");
       console.log("Jobs script initializing...");
@@ -2442,6 +2559,11 @@
           jobsGrid.appendChild(jobCard);
           loadedJobs += 1;
         });
+
+        // Initialize impression tracking for newly rendered jobs
+        if (typeof window.initJobImpressionTracking === 'function') {
+          window.initJobImpressionTracking();
+        }
       }
 
       function showJobsError(message) {
@@ -2461,6 +2583,7 @@
       function createJobCard(job) {
         const card = document.createElement("div");
         card.className = "job-item";
+        card.dataset.jobId = job.id; // Store job ID for impression tracking
         card.onclick = () => {
           // Track job click with Posthog
           if (typeof posthog !== "undefined") {
@@ -2477,6 +2600,7 @@
 
           // Track job click with custom analytics
           trackEvent('job_click', {
+            job_id: job.id,
             title: job.title,
             company: job.company,
             location: `${job.city}, ${job.state}`

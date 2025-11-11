@@ -6,6 +6,14 @@ GigSafe Job Board is a specialized job aggregator for delivery driver and logist
 ## Recent Changes
 
 ### November 11, 2025
+-   **Individual Job Analytics Dashboard:** Implemented comprehensive drill-down analytics feature for admin portal:
+    -   **Search & Filter:** Added real-time search box above Popular Job Clicks table to filter by job title, company, or location
+    -   **Click-to-Analyze:** Made all job rows clickable to open detailed analytics modal
+    -   **Analytics Modal:** Shows individual job performance with Views, Clicks, and Click-Through Rate (CTR)
+    -   **Time Range Selector:** Support for 24 hours, 7 days, 30 days, and all-time analytics
+    -   **Dual-Axis Chart:** Chart.js visualization showing views vs clicks over time with separate Y-axes
+    -   **Backend API:** New `/api/admin/analytics/job/:jobId` endpoint with time range filtering and admin authentication
+    -   **Job Impression Tracking:** Implemented Intersection Observer-based tracking that records when job cards become visible (50% threshold), with batching (max 20 impressions per 5 seconds) and session-based de-duplication to optimize performance
 -   **CORS Development Fix:** Updated CORS middleware to allow `*.replit.dev` URLs in development mode (when `REPL_ID` is set but not deployed). Production deployments still enforce strict CORS with approved domains only. This enables admin access during development while maintaining production security.
 -   **Session Cookie Security Enhancement:** Admin session cookies now automatically use secure flag (HTTPS-only) when running on Replit (detects `REPLIT_DEPLOYMENT` or `REPL_ID`), preventing session hijacking without requiring manual `NODE_ENV=production` configuration.
 

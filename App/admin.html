@@ -1147,23 +1147,39 @@
 
           // Function to render job clicks table
           window.renderJobClicksTable = function(clicksToShow) {
+            console.log('🔵 renderJobClicksTable called with', clicksToShow.length, 'clicks');
             clicksBody.innerHTML = "";
             
             if (clicksToShow.length > 0) {
-              clicksToShow.forEach((click) => {
+              clicksToShow.forEach((click, index) => {
                 const row = document.createElement("tr");
                 const hasJobId = click.jobId !== null && click.jobId !== undefined;
+                
+                console.log(`Row ${index}:`, {
+                  title: click.title,
+                  jobId: click.jobId,
+                  hasJobId: hasJobId
+                });
                 
                 if (hasJobId) {
                   row.style.cursor = "pointer";
                   row.style.transition = "background-color 0.2s";
                   row.onmouseenter = () => row.style.backgroundColor = "#f5f5f5";
                   row.onmouseleave = () => row.style.backgroundColor = "";
-                  row.onclick = () => openJobAnalyticsModal(click.jobId, click.title, click.company, click.location);
+                  row.onclick = () => {
+                    console.log('🟢 Row clicked!', {
+                      jobId: click.jobId,
+                      title: click.title,
+                      company: click.company,
+                      location: click.location
+                    });
+                    openJobAnalyticsModal(click.jobId, click.title, click.company, click.location);
+                  };
                   row.title = "Click to view detailed analytics";
                 } else {
                   row.style.opacity = "0.6";
                   row.title = "Legacy data - detailed analytics not available";
+                  console.log(`Row ${index} has NO jobId - not clickable`);
                 }
                 
                 row.innerHTML = `
@@ -1497,9 +1513,18 @@
 
       // Open job analytics modal
       async function openJobAnalyticsModal(jobId, jobTitle, jobCompany, jobLocation) {
+        console.log('🟡 openJobAnalyticsModal called with:', {
+          jobId,
+          jobTitle,
+          jobCompany,
+          jobLocation
+        });
+        
         const modal = document.getElementById('jobAnalyticsModal');
+        console.log('Modal element:', modal);
         
         if (!jobId) {
+          console.error('❌ Job ID missing!');
           alert('Unable to load analytics - job ID missing');
           return;
         }
@@ -1508,6 +1533,7 @@
         document.getElementById('analyticsJobTitle').textContent = jobTitle;
         document.getElementById('analyticsJobInfo').textContent = `${jobCompany} • ${jobLocation}`;
         
+        console.log('🟡 Showing modal...');
         // Show modal
         modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
@@ -1521,6 +1547,7 @@
         // Store current job data
         currentJobData = { jobId, title: jobTitle, company: jobCompany, location: jobLocation };
         
+        console.log('🟡 Fetching analytics...');
         // Fetch and display analytics
         await fetchJobAnalytics(jobId, currentTimeRange);
       }
@@ -1540,6 +1567,8 @@
 
       // Fetch job analytics from API
       async function fetchJobAnalytics(jobId, timeRange) {
+        console.log('🔵 fetchJobAnalytics called:', { jobId, timeRange });
+        
         const chartLoading = document.getElementById('analyticsChartLoading');
         const chartEmpty = document.getElementById('analyticsChartEmpty');
         const canvas = document.getElementById('jobAnalyticsChart');
@@ -1549,8 +1578,14 @@
         canvas.style.display = 'none';
         
         try {
-          const analyticsResponse = await fetch(`/api/admin/analytics/job/${jobId}?timeRange=${timeRange}`);
+          const url = `/api/admin/analytics/job/${jobId}?timeRange=${timeRange}`;
+          console.log('🔵 Fetching:', url);
+          
+          const analyticsResponse = await fetch(url);
+          console.log('🔵 Response status:', analyticsResponse.status);
+          
           const analyticsData = await analyticsResponse.json();
+          console.log('🔵 Response data:', analyticsData);
           
           if (analyticsData.success) {
             displayAnalyticsData(analyticsData);
@@ -1558,7 +1593,7 @@
             throw new Error(analyticsData.error || 'Failed to load analytics');
           }
         } catch (error) {
-          console.error('Error fetching job analytics:', error);
+          console.error('❌ Error fetching job analytics:', error);
           chartLoading.style.display = 'none';
           chartEmpty.textContent = `Error: ${error.message}`;
           chartEmpty.style.display = 'block';

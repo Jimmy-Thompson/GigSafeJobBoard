@@ -1156,7 +1156,7 @@
                 row.style.transition = "background-color 0.2s";
                 row.onmouseenter = () => row.style.backgroundColor = "#f5f5f5";
                 row.onmouseleave = () => row.style.backgroundColor = "";
-                row.onclick = () => openJobAnalyticsModal(click.title, click.company, click.location);
+                row.onclick = () => openJobAnalyticsModal(click.jobId, click.title, click.company, click.location);
                 row.innerHTML = `
                   <td><strong>${click.title}</strong></td>
                   <td>${click.company}</td>
@@ -1487,22 +1487,13 @@
       let analyticsChartInstance = null;
 
       // Open job analytics modal
-      async function openJobAnalyticsModal(jobTitle, jobCompany, jobLocation) {
+      async function openJobAnalyticsModal(jobId, jobTitle, jobCompany, jobLocation) {
         const modal = document.getElementById('jobAnalyticsModal');
         
-        // Find job ID from the allJobClicks array
-        const jobData = window.allJobClicks.find(j => 
-          j.title === jobTitle && j.company === jobCompany && j.location === jobLocation
-        );
-        
-        if (!jobData) {
-          alert('Unable to load analytics for this job');
+        if (!jobId) {
+          alert('Unable to load analytics - job ID missing');
           return;
         }
-
-        // We need to get the job ID - let's fetch it from the backend by matching title/company
-        // For now, we'll make an assumption that we need to search for jobs to get IDs
-        // This is a limitation - ideally the topClicks should include job_id
         
         // Set modal title and info
         document.getElementById('analyticsJobTitle').textContent = jobTitle;
@@ -1519,10 +1510,10 @@
         });
         
         // Store current job data
-        currentJobData = { title: jobTitle, company: jobCompany, location: jobLocation };
+        currentJobData = { jobId, title: jobTitle, company: jobCompany, location: jobLocation };
         
         // Fetch and display analytics
-        await fetchJobAnalytics(jobTitle, jobCompany, currentTimeRange);
+        await fetchJobAnalytics(jobId, currentTimeRange);
       }
 
       // Close analytics modal
@@ -1539,7 +1530,7 @@
       }
 
       // Fetch job analytics from API
-      async function fetchJobAnalytics(jobTitle, jobCompany, timeRange) {
+      async function fetchJobAnalytics(jobId, timeRange) {
         const chartLoading = document.getElementById('analyticsChartLoading');
         const chartEmpty = document.getElementById('analyticsChartEmpty');
         const canvas = document.getElementById('jobAnalyticsChart');
@@ -1549,43 +1540,14 @@
         canvas.style.display = 'none';
         
         try {
-          // Since we don't have job ID directly, we'll need to search
-          // For now, let's use a workaround: query analytics by title and company
-          // The backend should be updated to support this, but for now we'll show a message
+          const analyticsResponse = await fetch(`/api/admin/analytics/job/${jobId}?timeRange=${timeRange}`);
+          const analyticsData = await analyticsResponse.json();
           
-          // Note: This is a simplified version - in production you'd want to:
-          // 1. Include job_id in the topClicks API response
-          // 2. Or create an endpoint to search jobs by title/company to get ID
-          
-          // For now, show mock data or message
-          chartLoading.textContent = 'Analytics endpoint requires job ID. Fetching job details...';
-          
-          // Try to find job in database by querying jobs endpoint
-          const response = await fetch(`/api/jobs?page=1&limit=1000`);
-          const jobsData = await response.json();
-          
-          if (jobsData.success && jobsData.jobs) {
-            const matchedJob = jobsData.jobs.find(j => 
-              j.title === jobTitle && j.company === jobCompany
-            );
-            
-            if (matchedJob) {
-              // Now fetch analytics with the job ID
-              const analyticsResponse = await fetch(`/api/admin/analytics/job/${matchedJob.id}?timeRange=${timeRange}`);
-              const analyticsData = await analyticsResponse.json();
-              
-              if (analyticsData.success) {
-                displayAnalyticsData(analyticsData);
-              } else {
-                throw new Error(analyticsData.error || 'Failed to load analytics');
-              }
-            } else {
-              throw new Error('Job not found in database');
-            }
+          if (analyticsData.success) {
+            displayAnalyticsData(analyticsData);
           } else {
-            throw new Error('Failed to fetch jobs list');
+            throw new Error(analyticsData.error || 'Failed to load analytics');
           }
-          
         } catch (error) {
           console.error('Error fetching job analytics:', error);
           chartLoading.style.display = 'none';
@@ -1722,8 +1684,8 @@
           this.classList.add('active');
           
           // Refetch analytics with new time range
-          if (currentJobData) {
-            await fetchJobAnalytics(currentJobData.title, currentJobData.company, range);
+          if (currentJobData && currentJobData.jobId) {
+            await fetchJobAnalytics(currentJobData.jobId, range);
           }
         });
       });

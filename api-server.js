@@ -1458,7 +1458,7 @@ app.get('/api/admin/analytics/job/:jobId', requireAdmin, (req, res) => {
       SELECT COUNT(*) as count
       FROM analytics_events
       WHERE event_type = 'job_impression'
-      AND json_extract(event_data, '$.job_id') = ?
+      AND json_extract(event_data, '$.job_id') = CAST(? AS INTEGER)
       ${dateFilter}
     `).get(jobId);
 
@@ -1467,7 +1467,7 @@ app.get('/api/admin/analytics/job/:jobId', requireAdmin, (req, res) => {
       SELECT COUNT(*) as count
       FROM analytics_events
       WHERE event_type = 'job_click'
-      AND json_extract(event_data, '$.job_id') = ?
+      AND json_extract(event_data, '$.job_id') = CAST(? AS INTEGER)
       ${dateFilter}
     `).get(jobId);
 
@@ -1483,7 +1483,7 @@ app.get('/api/admin/analytics/job/:jobId', requireAdmin, (req, res) => {
         COUNT(*) as count
       FROM analytics_events
       WHERE event_type = 'job_impression'
-      AND json_extract(event_data, '$.job_id') = ?
+      AND json_extract(event_data, '$.job_id') = CAST(? AS INTEGER)
       ${dateFilter}
       GROUP BY DATE(created_at)
       ORDER BY date ASC
@@ -1495,7 +1495,7 @@ app.get('/api/admin/analytics/job/:jobId', requireAdmin, (req, res) => {
         COUNT(*) as count
       FROM analytics_events
       WHERE event_type = 'job_click'
-      AND json_extract(event_data, '$.job_id') = ?
+      AND json_extract(event_data, '$.job_id') = CAST(? AS INTEGER)
       ${dateFilter}
       GROUP BY DATE(created_at)
       ORDER BY date ASC

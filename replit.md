@@ -6,15 +6,22 @@ GigSafe Job Board is a specialized job aggregator for delivery driver and logist
 ## Recent Changes
 
 ### November 11, 2025
+-   **WARP Freight Vehicle Requirements:** Enhanced WARP job listings with proper vehicle type filtering:
+    -   **Data Population:** All 723 WARP Freight jobs now have `vehicle_requirements` field populated (previously stored only in job titles)
+    -   **Vehicle Breakdown:** 656 jobs require "26-ft Straight Truck", 65 require "Cargo Van", 2 require "Sprinter Van"
+    -   **Filter Compatibility:** WARP jobs now appear correctly when filtering by vehicle type
+    -   **Verification Script:** Created `verify_warp_jobs.js` to validate vehicle requirements coverage
+    -   **Analytics Preservation:** Stable IDs ensured all existing analytics remained intact across database refresh
 -   **Stable Hash-Based Job IDs:** Implemented production-ready database import system using MD5 hash-based stable IDs:
     -   **ID Generation:** Job IDs are now 10-character hex strings (e.g., `37fa105c2e`) derived from MD5 hash of `job_url`, ensuring same job always gets same ID across imports
     -   **Analytics Preservation:** Stable IDs allow analytics (clicks, impressions, CTR) to persist across database refreshes without orphaned data
     -   **Import Scripts:** Created automated import pipeline in `scripts/` directory:
         - `import_with_stable_ids.js`: Main import script with transaction-based batch processing, data validation, duplicate detection
         - `backup_analytics.js`: Backs up subscribers, certifications, and non-job analytics events
-        - `restore_analytics.js`: Restores analytics infrastructure to newly imported database
+        - `restore_analytics.js`: Restores analytics infrastructure to newly imported database (includes ip_hash column for analytics)
         - `verify_database.js`: Validates database integrity and ID format consistency
         - `test_id_stability.js`: Confirms IDs regenerate consistently from URLs
+        - `verify_warp_jobs.js`: Validates WARP job vehicle requirements coverage
     -   **Production Import:** Successfully imported 2,766 jobs (up from 1,186) with stable IDs, skipped 190 invalid jobs missing required fields
     -   **Clean Analytics Start:** Cleared job_click and job_impression events for fresh production baseline while preserving subscriber/certification data
     -   **Import Workflow:** Standard procedure is: backup → import → restore → verify → restart

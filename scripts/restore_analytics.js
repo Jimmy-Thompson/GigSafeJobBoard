@@ -5,10 +5,14 @@ console.log('♻️  Restoring analytics infrastructure...\n');
 
 const db = new Database('outputs/master_database/master_jobs.db');
 
-// Create analytics tables
+// Drop existing analytics tables and recreate
 console.log('Creating analytics tables...');
 db.exec(`
-  CREATE TABLE IF NOT EXISTS subscribers (
+  DROP TABLE IF EXISTS analytics_events;
+  DROP TABLE IF EXISTS subscriber_certifications;
+  DROP TABLE IF EXISTS subscribers;
+  
+  CREATE TABLE subscribers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
     state TEXT,
@@ -18,7 +22,7 @@ db.exec(`
     subscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
   
-  CREATE TABLE IF NOT EXISTS subscriber_certifications (
+  CREATE TABLE subscriber_certifications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     subscriber_id INTEGER NOT NULL,
     certification_type TEXT NOT NULL,
@@ -27,11 +31,12 @@ db.exec(`
     FOREIGN KEY (subscriber_id) REFERENCES subscribers(id)
   );
   
-  CREATE TABLE IF NOT EXISTS analytics_events (
+  CREATE TABLE analytics_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type TEXT NOT NULL,
     event_data TEXT,
     session_id TEXT,
+    ip_hash TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
   

@@ -426,8 +426,14 @@ function buildWhereClause(filters, params) {
   }
 
   if (filters.vehicle) {
-    whereConditions.push('vehicle_requirements LIKE ? COLLATE NOCASE');
-    params.push(`%${filters.vehicle}%`);
+    // Special handling for Box Truck to also match Straight Truck variants
+    if (filters.vehicle === 'Box Truck') {
+      whereConditions.push('(vehicle_requirements LIKE ? COLLATE NOCASE OR vehicle_requirements LIKE ? COLLATE NOCASE)');
+      params.push('%Box Truck%', '%Straight Truck%');
+    } else {
+      whereConditions.push('vehicle_requirements LIKE ? COLLATE NOCASE');
+      params.push(`%${filters.vehicle}%`);
+    }
   }
 
   if (filters.certifications) {

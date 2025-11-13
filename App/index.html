@@ -1552,6 +1552,60 @@
           display: none;
         }
       }
+
+      /* Developer Footer */
+      .developer-footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 24px 16px;
+        background-color: var(--bg-secondary);
+        border-top: 1px solid var(--border-color);
+        margin-top: 48px;
+      }
+
+      .developer-text {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        font-weight: 400;
+      }
+
+      .linkedin-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        transition: all 0.2s ease;
+        text-decoration: none;
+      }
+
+      .linkedin-link:hover {
+        color: #0a66c2; /* LinkedIn brand color */
+        transform: translateY(-2px);
+      }
+
+      .linkedin-icon {
+        width: 20px;
+        height: 20px;
+      }
+
+      @media (max-width: 480px) {
+        .developer-footer {
+          flex-direction: column;
+          gap: 4px;
+          padding: 20px 16px;
+        }
+
+        .developer-text {
+          font-size: 0.8rem;
+        }
+
+        .linkedin-icon {
+          width: 18px;
+          height: 18px;
+        }
+      }
     </style>
   </head>
   <body>

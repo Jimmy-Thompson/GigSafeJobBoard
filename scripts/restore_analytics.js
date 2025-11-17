@@ -15,11 +15,12 @@ db.exec(`
   CREATE TABLE subscribers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
-    state TEXT,
+    first_name TEXT,
+    last_name TEXT,
     city TEXT,
-    vehicle_type TEXT,
-    certifications_uploaded INTEGER DEFAULT 0,
-    subscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    state TEXT,
+    source_tag TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
   
   CREATE TABLE subscriber_certifications (
@@ -63,19 +64,20 @@ const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
 // Restore subscribers
 console.log(`\nRestoring ${backup.subscribers.length} subscribers...`);
 const insertSubscriber = db.prepare(`
-  INSERT INTO subscribers (id, email, state, city, vehicle_type, certifications_uploaded, subscribed_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO subscribers (id, email, first_name, last_name, city, state, source_tag, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 for (const sub of backup.subscribers) {
   insertSubscriber.run(
     sub.id,
     sub.email,
-    sub.state,
+    sub.first_name || null,
+    sub.last_name || null,
     sub.city,
-    sub.vehicle_type,
-    sub.certifications_uploaded,
-    sub.subscribed_at
+    sub.state,
+    sub.source_tag || null,
+    sub.created_at || sub.subscribed_at
   );
 }
 console.log('✓ Subscribers restored');

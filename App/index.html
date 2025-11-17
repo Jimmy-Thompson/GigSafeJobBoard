@@ -948,6 +948,7 @@
       .jobs-container {
         margin: 0 auto;
         max-width: var(--max-width);
+        scroll-margin-top: 80px;
       }
 
       .jobs-scroll-area {
@@ -2468,7 +2469,7 @@
 
         // Auto-trigger search when certification is removed
         console.log("❌ About to call fetchJobs(1) - AUTO-TRIGGER ON REMOVE");
-        fetchJobs(1);
+        fetchJobs(1, null, false);
         console.log("❌ fetchJobs(1) call completed");
       }
 
@@ -2484,14 +2485,23 @@
             console.log("🔵 addCertification() completed");
             console.log("🔵 About to call fetchJobs(1) - AUTO-TRIGGER");
             // Auto-trigger search when certification is selected
-            fetchJobs(1);
+            fetchJobs(1, null, false);
             console.log("🔵 fetchJobs(1) call completed");
           }
         });
       }
 
-      async function fetchJobs(page = 1, filtersOverride = null) {
-        console.log(`fetchJobs called with page: ${page}`);
+      function scrollToJobsSection() {
+        const jobsContainer = document.querySelector('.jobs-container');
+        
+        if (jobsContainer && jobsScrollArea) {
+          jobsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          jobsScrollArea.scrollTop = 0;
+        }
+      }
+
+      async function fetchJobs(page = 1, filtersOverride = null, isManualSearch = false) {
+        console.log(`fetchJobs called with page: ${page}, isManualSearch: ${isManualSearch}`);
         console.log("isLoading:", isLoading);
         console.log("hasMoreJobs:", hasMoreJobs);
 
@@ -2588,6 +2598,10 @@
           renderJobs(data.data);
           updateJobsCount();
           currentPage = page;
+
+          if (isNewSearch && isManualSearch) {
+            scrollToJobsSection();
+          }
 
           console.log("Page loaded successfully");
           console.log(`  Total jobs: ${totalJobs}`);
@@ -2877,7 +2891,7 @@
         }
 
         console.log("Fetching from server with filters");
-        fetchJobs(1, filters);
+        fetchJobs(1, filters, true);
       }
       // Initialize
       document.addEventListener("DOMContentLoaded", () => {
@@ -3261,7 +3275,7 @@
         }
 
         // Load jobs
-        fetchJobs(1);
+        fetchJobs(1, null, false);
         setupIntersectionObserver();
 
         console.log("Initialization complete");

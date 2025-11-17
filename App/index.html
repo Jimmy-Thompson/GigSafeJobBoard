@@ -2891,7 +2891,7 @@
         }
 
         console.log("Fetching from server with filters");
-        fetchJobs(1, filters, true);
+        fetchJobs(1, filters, false);
       }
       // Initialize
       document.addEventListener("DOMContentLoaded", () => {
@@ -2901,13 +2901,48 @@
         // Load cities data first
         loadCitiesData();
 
-        // Setup search button
+        // Setup search button - ONLY button click triggers auto-scroll
         if (searchButton) {
-          searchButton.addEventListener("click", triggerSearch);
+          searchButton.addEventListener("click", () => {
+            const filters = getCurrentFilters();
+            
+            // Track analytics
+            if (filters.keyword) {
+              trackEvent('search', { keyword: filters.keyword });
+            }
+            if (filters.state || filters.city || filters.vehicle !== 'Any') {
+              trackEvent('filter', { 
+                state: filters.state, 
+                city: filters.city, 
+                vehicle: filters.vehicle 
+              });
+            }
+
+            const useFuzzy = shouldUseFuzzySearch(filters);
+
+            if (useFuzzy) {
+              console.log(
+                "Using client-side fuzzy search on",
+                allLoadedJobs.length,
+                "loaded jobs",
+              );
+              setSearchLoading(true);
+              activeFilters = {
+                ...filters,
+                certifications: [...filters.certifications],
+              };
+              applyFuzzySearch(filters.keyword);
+              setSearchLoading(false);
+              return;
+            }
+
+            console.log("Fetching from server with filters - BUTTON CLICK WITH SCROLL");
+            fetchJobs(1, filters, true);
+          });
           console.log("Search button event listener attached");
         }
 
-        // Setup Enter key on keyword input
+        // Setup Enter key on keyword input - NO auto-scroll
         if (keywordInput) {
           keywordInput.addEventListener("keypress", (e) => {
             if (e.key === "Enter") {

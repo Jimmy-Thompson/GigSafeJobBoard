@@ -2983,12 +2983,10 @@
         // Check subscription state on load
         updateSubscribeButton();
 
-        if (subscribeButton && subscribeModal) {
-          // Open modal when subscribe button is clicked
+        if (subscribeButton) {
+          // Open Paperform in new tab when subscribe button is clicked
           subscribeButton.addEventListener("click", () => {
-            if (subscribeButton.disabled) return; // Don't open if subscribed
-            subscribeModal.classList.add("active");
-            document.body.style.overflow = "hidden"; // Prevent background scrolling
+            window.open('https://dnwfrabb.paperform.co/', '_blank');
           });
 
           // Close modal when close button is clicked

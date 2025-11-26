@@ -57,10 +57,6 @@ externalPort = 5000
 localPort = 44681
 externalPort = 3001
 
-[[ports]]
-localPort = 45953
-externalPort = 5173
-
 [deployment]
 deploymentTarget = "autoscale"
 run = ["node", "api-server.js"]

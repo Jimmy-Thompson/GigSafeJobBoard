@@ -57,6 +57,14 @@ function formatTimestamp(value) {
   return date.toISOString().replace('T',' ').replace(/\.\d{3}Z$/, ''); 
 }
 
+function formatDateShort(value) {
+  const date = value ? new Date(value) : new Date();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yy = String(date.getFullYear()).slice(-2);
+  return `${mm}/${dd}/${yy}`;
+}
+
 function runXmlExport(reason) {
   if (!process.env.DATABASE_URL) return;
   if (xmlExportInProgress) { console.log(`[xml-export] Skip (${reason}) - already running`); return; }
@@ -152,7 +160,7 @@ function renderJobDetailPage(job) {
     ${job.job_url ? `<a href="${escapeHtml(job.job_url)}" target="_blank" rel="noopener noreferrer" class="apply-btn">Apply Now</a>` : ''}
     <div class="meta">
       <span class="meta-item">&#128205; ${escapeHtml(locationText)}</span>
-      <span class="meta-item">&#128197; Posted ${escapeHtml(formatTimestamp(job.submitted_at))}</span>
+      <span class="meta-item">&#128197; Posted ${escapeHtml(formatDateShort(job.submitted_at))}</span>
     </div>
     ${job.pay ? `<div class="section"><span class="pay">${escapeHtml(job.pay)}</span></div>` : ''}
     ${sanitizedDescription ? `<div class="section"><div class="section-title">Description</div><div class="section-content">${sanitizedDescription}</div></div>` : ''}

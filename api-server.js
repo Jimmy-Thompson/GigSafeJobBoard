@@ -10,6 +10,8 @@ import BetterSqlite3Store from 'better-sqlite3-session-store';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { spawn } from 'child_process';
+import { Client } from 'pg';
 import { fileURLToPath } from 'url';
 import { getDb, getUserDb, closeDb } from './shared/db.js';
 
@@ -324,6 +326,29 @@ app.use(express.static('App', {
   extensions: ['html']
 }));
 
+app.get('/jobs/:id', async (req, res) => {
+  const jobId = Number.parseInt(req.params.id);
+  if (!jobId || Number.isNaN(jobId)) {
+    return res.status(404).send('Job not found');
+  }
+
+  try {
+    const job = process.env.DB_URL
+      ? await fetchUserJobFromPostgres(jobId)
+      : fetchUserJobFromSqlite(jobId);
+
+    if (!job) {
+      return res.status(404).send('Job not found');
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(renderJobDetailPage(job));
+  } catch (error) {
+    console.error('Error loading job detail page:', error);
+    res.status(500).send('Failed to load job');
+  }
+});
+
 // Serve attached assets (images, logos, etc.)
 app.use('/attached_assets', express.static('attached_assets'));
 
@@ -344,6 +369,214 @@ function sanitizeHTML(html, maxLength = 50000) {
     ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li'],
     ALLOWED_ATTR: []
   });
+}
+
+const XML_EXPORT_INTERVAL_MS = Number(process.env.XML_EXPORT_INTERVAL_MS ?? 15 * 60 * 1000);
+let xmlExportInProgress = false;
+let xmlExportTimer = null;
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatTimestamp(value) {
+  const date = value ? new Date(value) : new Date();
+  return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+}
+
+function runXmlExport(reason) {
+  if (!process.env.DB_URL) {
+    return;
+  }
+  if (xmlExportInProgress) {
+    console.log(`[xml-export] Skip (${reason}) - already running`);
+    return;
+  }
+  const scriptPath = path.join(__dirname, 'scripts', 'export_user_jobs_xml.js');
+  xmlExportInProgress = true;
+  const child = spawn(process.execPath, [scriptPath], {
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  child.stdout.on('data', data => console.log(`[xml-export] ${data.toString().trim()}`));
+  child.stderr.on('data', data => console.error(`[xml-export] ${data.toString().trim()}`));
+  child.on('close', code => {
+    xmlExportInProgress = false;
+    if (code !== 0) {
+      console.error(`[xml-export] failed with code ${code}`);
+    }
+  });
+}
+
+async function fetchUserJobFromPostgres(jobId) {
+  const client = new Client({ connectionString: process.env.DB_URL });
+  await client.connect();
+  try {
+    const result = await client.query(
+      `SELECT
+        id, title, company, city, state, postalcode, address, description, pay,
+        general_requirements, benefits, vehicle_requirements, insurance_requirement,
+        certifications_required, schedule_details, submitted_at
+       FROM user_submitted_jobs
+       WHERE id = $1
+         AND hidden = false
+         AND (submitted_at IS NULL OR submitted_at > NOW() - INTERVAL '24 hours')
+       LIMIT 1`,
+      [jobId]
+    );
+    return result.rows[0] ?? null;
+  } finally {
+    await client.end();
+  }
+}
+
+function fetchUserJobFromSqlite(jobId) {
+  const userDb = getUserDb();
+  return userDb.prepare(`
+    SELECT
+      id, title, company, city, state, postalcode, address, description, pay,
+      general_requirements, benefits, vehicle_requirements, insurance_requirement,
+      certifications_required, schedule_details, submitted_at
+    FROM jobs
+    WHERE id = ?
+      AND hidden = 0
+      AND (submitted_at IS NULL OR datetime(submitted_at) > datetime('now', '-24 hours'))
+    LIMIT 1
+  `).get(jobId);
+}
+
+function renderJobDetailPage(job) {
+  const locationParts = [job.address, job.city, job.state, job.postalcode].filter(Boolean);
+  const locationText = locationParts.length ? locationParts.join(', ') : 'Location not specified';
+
+  return `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>${escapeHtml(job.title)} - GigSafe Job Board</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <style>
+          :root {
+            --navy: #0f193b;
+            --blue: #1d8bff;
+            --purple: #5B3A9D;
+            --text-primary: #121826;
+            --text-secondary: #4a5773;
+            --surface: #ffffff;
+            --surface-muted: #f5f7fd;
+            --border: #dde3f5;
+            --shadow-card: 0 20px 45px rgba(52, 74, 165, 0.12);
+            --radius-lg: 24px;
+            --radius-md: 16px;
+            --max-width: 980px;
+          }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            font-family: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--surface-muted);
+            color: var(--text-primary);
+            line-height: 1.6;
+          }
+          header {
+            padding: 24px 5vw;
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+          }
+          .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+            color: var(--navy);
+            text-decoration: none;
+            font-size: 1.1rem;
+          }
+          .brand-mark {
+            width: 40px;
+            height: 40px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--purple), var(--blue));
+            display: grid;
+            place-items: center;
+            color: #fff;
+            font-weight: 700;
+          }
+          main { padding: 48px 5vw 80px; }
+          .card {
+            max-width: var(--max-width);
+            margin: 0 auto;
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            box-shadow: var(--shadow-card);
+          }
+          .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            color: var(--text-secondary);
+            font-weight: 600;
+          }
+          .title {
+            font-size: clamp(2rem, 4vw, 2.6rem);
+            margin: 0 0 12px;
+            color: var(--navy);
+          }
+          .company { font-size: 1.1rem; color: var(--text-secondary); font-weight: 600; }
+          .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(29, 139, 255, 0.12);
+            color: var(--blue);
+            font-weight: 600;
+            font-size: 0.9rem;
+          }
+          .section { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border); }
+          .section h3 { margin: 0 0 12px; font-size: 1.1rem; color: var(--navy); }
+          .tag-list { display: flex; flex-wrap: wrap; gap: 10px; }
+          .tag { padding: 6px 12px; border-radius: var(--radius-md); background: #f0f3ff; font-weight: 600; font-size: 0.9rem; }
+        </style>
+      </head>
+      <body>
+        <header>
+          <a class="brand" href="/">
+            <span class="brand-mark">G</span>
+            GigSafe Job Board
+          </a>
+        </header>
+        <main>
+          <div class="card">
+            <div>
+              <h1 class="title">${escapeHtml(job.title)}</h1>
+              <div class="company">${escapeHtml(job.company)}</div>
+              <div class="meta">
+                <span>📍 ${escapeHtml(locationText)}</span>
+                <span>🗓️ ${escapeHtml(formatTimestamp(job.submitted_at))}</span>
+                ${job.pay ? `<span class="pill">${escapeHtml(job.pay)}</span>` : ''}
+              </div>
+            </div>
+            ${job.description ? `<div class="section"><h3>Description</h3><div>${escapeHtml(job.description).replace(/\\n/g, '<br />')}</div></div>` : ''}
+            ${(job.general_requirements || job.certifications_required) ? `<div class="section"><h3>Requirements</h3><div>${escapeHtml([job.general_requirements, job.certifications_required].filter(Boolean).join('\\n')).replace(/\\n/g, '<br />')}</div></div>` : ''}
+            ${(job.vehicle_requirements || job.insurance_requirement) ? `<div class="section"><h3>Vehicle & Insurance</h3><div class="tag-list">${job.vehicle_requirements ? `<span class="tag">${escapeHtml(job.vehicle_requirements)}</span>` : ''}${job.insurance_requirement ? `<span class="tag">${escapeHtml(job.insurance_requirement)}</span>` : ''}</div></div>` : ''}
+            ${(job.schedule_details || job.benefits) ? `<div class="section"><h3>Schedule & Benefits</h3><div>${escapeHtml([job.schedule_details, job.benefits].filter(Boolean).join('\\n')).replace(/\\n/g, '<br />')}</div></div>` : ''}
+          </div>
+        </main>
+      </body>
+    </html>
+  `;
 }
 
 function validateEmail(email) {
@@ -761,6 +994,8 @@ app.post('/api/jobs', jobPostingLimiter, (req, res) => {
       message: 'Job posted successfully',
       data: result
     });
+
+    runXmlExport('job_posted');
   } catch (error) {
     console.error('Error posting job:', error);
     res.status(500).json({
@@ -803,6 +1038,8 @@ app.delete('/api/jobs/:id', (req, res) => {
       success: true,
       message: 'Job deleted successfully'
     });
+
+    runXmlExport('job_deleted');
   } catch (error) {
     console.error('Error deleting job:', error);
     res.status(500).json({
@@ -858,6 +1095,8 @@ app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
       message: newHiddenStatus ? 'Job hidden successfully' : 'Job unhidden successfully',
       hidden: newHiddenStatus === 1
     });
+
+    runXmlExport('job_visibility_changed');
   } catch (error) {
     console.error('Error toggling job visibility:', error);
     res.status(500).json({
@@ -1697,14 +1936,26 @@ function initializeUserJobsDb() {
   console.log('User jobs database initialized');
 }
 
+function scheduleXmlExport() {
+  if (!process.env.DB_URL) {
+    return;
+  }
+  runXmlExport('startup');
+  xmlExportTimer = setInterval(() => runXmlExport('interval'), XML_EXPORT_INTERVAL_MS);
+}
+
 // Initialize databases on startup
 initializeUserJobsDb();
+scheduleXmlExport();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API server running on http://0.0.0.0:${PORT}`);
 });
 
 process.on('SIGINT', () => {
+  if (xmlExportTimer) {
+    clearInterval(xmlExportTimer);
+  }
   closeDb();
   process.exit(0);
 });

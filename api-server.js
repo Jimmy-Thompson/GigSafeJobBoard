@@ -12,6 +12,8 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
+import { Client } from 'pg';
 import { getDb, getUserDb, closeDb } from './shared/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +43,131 @@ function logSecurityEvent(eventType, details) {
 const loginAttempts = new Map();
 const LOGIN_ATTEMPT_WINDOW = 15 * 60 * 1000; // 15 minutes
 const MAX_LOGIN_ATTEMPTS = 5;
+
+const XML_EXPORT_INTERVAL_MS = Number(process.env.XML_EXPORT_INTERVAL_MS ?? 15 * 60 * 1000);
+let xmlExportInProgress = false;
+let xmlExportTimer = null;
+
+function escapeHtml(value) { 
+  return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); 
+}
+
+function formatTimestamp(value) { 
+  const date = value ? new Date(value) : new Date(); 
+  return date.toISOString().replace('T',' ').replace(/\.\d{3}Z$/, ''); 
+}
+
+function runXmlExport(reason) {
+  if (!process.env.DATABASE_URL) return;
+  if (xmlExportInProgress) { console.log(`[xml-export] Skip (${reason}) - already running`); return; }
+  const scriptPath = path.join(__dirname, 'scripts', 'export_user_jobs_xml.js');
+  xmlExportInProgress = true;
+  const child = spawn(process.execPath, [scriptPath], { 
+    env: { ...process.env, DB_URL: process.env.DATABASE_URL }, 
+    stdio: ['ignore','pipe','pipe'] 
+  });
+  child.stdout.on('data', d => console.log(`[xml-export] ${d.toString().trim()}`));
+  child.stderr.on('data', d => console.error(`[xml-export] ${d.toString().trim()}`));
+  child.on('close', code => { xmlExportInProgress = false; if (code !== 0) console.error(`[xml-export] failed with code ${code}`); });
+}
+
+async function fetchUserJobFromPostgres(jobId) {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    const result = await client.query(
+      `SELECT
+        id, title, company, city, state, postalcode, address, description, pay,
+        general_requirements, benefits, vehicle_requirements, insurance_requirement,
+        certifications_required, schedule_details, submitted_at
+       FROM user_submitted_jobs
+       WHERE id = $1
+         AND hidden = false
+         AND (submitted_at IS NULL OR submitted_at > NOW() - INTERVAL '24 hours')
+       LIMIT 1`,
+      [jobId]
+    );
+    return result.rows[0] ?? null;
+  } finally {
+    await client.end();
+  }
+}
+
+function fetchUserJobFromSqlite(jobId) {
+  const userDb = getUserDb();
+  return userDb.prepare(`
+    SELECT
+      id, title, company, city, state, postalcode, address, description, pay,
+      general_requirements, benefits, vehicle_requirements, insurance_requirement,
+      certifications_required, schedule_details, submitted_at
+    FROM jobs
+    WHERE id = ?
+      AND hidden = 0
+      AND (submitted_at IS NULL OR datetime(submitted_at) > datetime('now', '-24 hours'))
+    LIMIT 1
+  `).get(jobId);
+}
+
+function renderJobDetailPage(job) {
+  const locationParts = [job.address, job.city, job.state, job.postalcode].filter(Boolean);
+  const locationText = locationParts.length ? locationParts.join(', ') : 'Location not specified';
+  const sanitizedDescription = job.description ? DOMPurify.sanitize(job.description) : '';
+  const sanitizedRequirements = job.general_requirements ? DOMPurify.sanitize(job.general_requirements) : '';
+  const sanitizedBenefits = job.benefits ? DOMPurify.sanitize(job.benefits) : '';
+  const sanitizedSchedule = job.schedule_details ? DOMPurify.sanitize(job.schedule_details) : '';
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(job.title)} - GigSafe Job Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Manrope', sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px; }
+    h1 { font-size: 1.8rem; font-weight: 700; color: #1a1a1a; margin-bottom: 8px; }
+    .company { font-size: 1.1rem; color: #666; margin-bottom: 16px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; color: #888; font-size: 0.9rem; }
+    .meta-item { display: flex; align-items: center; gap: 6px; }
+    .section { margin-bottom: 24px; }
+    .section-title { font-size: 1rem; font-weight: 600; color: #333; margin-bottom: 8px; border-bottom: 2px solid #f0f0f0; padding-bottom: 4px; }
+    .section-content { color: #555; }
+    .pay { font-size: 1.2rem; font-weight: 600; color: #22c55e; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 500; background: #e5e7eb; color: #374151; margin-right: 6px; margin-bottom: 6px; }
+    .badge-cert { background: #fef3c7; color: #92400e; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #3b82f6; text-decoration: none; font-weight: 500; }
+    .back-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">&larr; Back to Job Board</a>
+    <h1>${escapeHtml(job.title)}</h1>
+    <p class="company">${escapeHtml(job.company)}</p>
+    <div class="meta">
+      <span class="meta-item">&#128205; ${escapeHtml(locationText)}</span>
+      <span class="meta-item">&#128197; Posted ${escapeHtml(formatTimestamp(job.submitted_at))}</span>
+    </div>
+    ${job.pay ? `<div class="section"><span class="pay">${escapeHtml(job.pay)}</span></div>` : ''}
+    ${sanitizedDescription ? `<div class="section"><div class="section-title">Description</div><div class="section-content">${sanitizedDescription}</div></div>` : ''}
+    ${sanitizedRequirements ? `<div class="section"><div class="section-title">Requirements</div><div class="section-content">${sanitizedRequirements}</div></div>` : ''}
+    ${sanitizedBenefits ? `<div class="section"><div class="section-title">Benefits</div><div class="section-content">${sanitizedBenefits}</div></div>` : ''}
+    ${job.vehicle_requirements ? `<div class="section"><div class="section-title">Vehicle Requirements</div><div class="section-content"><span class="badge">${escapeHtml(job.vehicle_requirements)}</span></div></div>` : ''}
+    ${job.certifications_required ? `<div class="section"><div class="section-title">Certifications Required</div><div class="section-content">${job.certifications_required.split(',').map(c => `<span class="badge badge-cert">${escapeHtml(c.trim())}</span>`).join('')}</div></div>` : ''}
+    ${sanitizedSchedule ? `<div class="section"><div class="section-title">Schedule</div><div class="section-content">${sanitizedSchedule}</div></div>` : ''}
+  </div>
+</body>
+</html>`;
+}
+
+function scheduleXmlExport() {
+  if (!process.env.DATABASE_URL) return;
+  runXmlExport('startup');
+  xmlExportTimer = setInterval(() => runXmlExport('interval'), XML_EXPORT_INTERVAL_MS);
+}
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -466,6 +593,20 @@ function buildWhereClause(filters, params) {
   return `WHERE ${whereConditions.join(' AND ')}`;
 }
 
+app.get('/jobs/:id', async (req, res) => {
+  const jobId = Number.parseInt(req.params.id);
+  if (!jobId || Number.isNaN(jobId)) return res.status(404).send('Job not found');
+  try {
+    const job = process.env.DATABASE_URL ? await fetchUserJobFromPostgres(jobId) : fetchUserJobFromSqlite(jobId);
+    if (!job) return res.status(404).send('Job not found');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(renderJobDetailPage(job));
+  } catch (err) {
+    console.error('Error loading job detail page:', err);
+    res.status(500).send('Failed to load job');
+  }
+});
+
 app.get('/api/jobs', (req, res) => {
   const page = Number.parseInt(req.query.page) || 1;
   const limit = Number.parseInt(req.query.limit) || 20;
@@ -760,6 +901,8 @@ app.post('/api/jobs', jobPostingLimiter, (req, res) => {
       company: sanitizedCompany 
     });
 
+    runXmlExport('job_posted');
+
     res.json({
       success: true,
       message: 'Job posted successfully',
@@ -802,6 +945,8 @@ app.delete('/api/jobs/:id', (req, res) => {
         error: 'Job not found'
       });
     }
+
+    runXmlExport('job_deleted');
 
     res.json({
       success: true,
@@ -856,6 +1001,8 @@ app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
       jobId,
       action: newHiddenStatus ? 'hide' : 'unhide'
     });
+
+    runXmlExport('job_visibility_changed');
 
     res.json({
       success: true,
@@ -1703,12 +1850,14 @@ function initializeUserJobsDb() {
 
 // Initialize databases on startup
 initializeUserJobsDb();
+scheduleXmlExport();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API server running on http://0.0.0.0:${PORT}`);
 });
 
 process.on('SIGINT', () => {
+  if (xmlExportTimer) clearInterval(xmlExportTimer);
   closeDb();
   process.exit(0);
 });

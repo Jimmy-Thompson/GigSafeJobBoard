@@ -76,9 +76,9 @@
     />
     <style>
       :root {
-        --purple: #5B3A9D;
-        --blue: #1d8bff;
-        --violet: #6A4C9E;
+        --purple: #4B238C;
+        --black: #000000;
+        --violet: #5B3A9D;
         --indigo: #1f2b6c;
         --navy: #0f193b;
         --text-primary: #121826;
@@ -144,13 +144,16 @@
         width: 42px;
         height: 42px;
         border-radius: 16px;
-        background: linear-gradient(135deg, var(--purple), var(--blue));
         display: grid;
         place-items: center;
-        color: white;
-        font-size: 1.2rem;
-        font-weight: 700;
-        box-shadow: 0 16px 30px rgba(88, 71, 255, 0.35);
+        box-shadow: 0 16px 30px rgba(91, 58, 157, 0.35);
+        overflow: hidden;
+      }
+
+      .brand-mark img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
       }
 
       .nav-links {
@@ -172,10 +175,10 @@
       }
 
       .hero {
-        background: radial-gradient(circle at top left, rgba(104, 70, 255, 0.25), transparent 55%),
-          linear-gradient(135deg, rgba(104, 70, 255, 0.9), rgba(29, 139, 255, 0.9));
+        background: radial-gradient(circle at top left, rgba(75, 35, 140, 0.4), transparent 55%),
+          linear-gradient(135deg, rgba(75, 35, 140, 0.98) 0%, rgba(75, 35, 140, 0.98) 75%, rgba(0, 0, 0, 0.95) 100%);
         color: white;
-        padding: 96px 4vw 96px;
+        padding: 60px 4vw 96px;
         position: relative;
         overflow: hidden;
       }
@@ -269,8 +272,8 @@
       .search-input:focus,
       .search-select:focus {
         outline: none;
-        border-color: rgba(104, 70, 255, 0.9);
-        box-shadow: 0 0 0 4px rgba(104, 70, 255, 0.15);
+        border-color: rgba(91, 58, 157, 0.9);
+        box-shadow: 0 0 0 4px rgba(91, 58, 157, 0.15);
       }
 
       .search-actions {
@@ -286,7 +289,7 @@
         display: inline-flex;
         align-items: center;
         gap: 10px;
-        background: rgba(104, 70, 255, 0.12);
+        background: rgba(91, 58, 157, 0.12);
         color: var(--purple);
         padding: 10px 16px;
         border-radius: var(--radius-pill);
@@ -300,16 +303,16 @@
         font-size: 1rem;
         font-weight: 700;
         color: white;
-        background: linear-gradient(135deg, var(--purple), var(--blue));
+        background: var(--purple);
         cursor: pointer;
-        box-shadow: 0 16px 30px rgba(33, 76, 203, 0.35);
+        box-shadow: 0 16px 30px rgba(75, 35, 140, 0.4);
         transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
       }
 
       .search-button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 18px 36px rgba(33, 76, 203, 0.4);
-        filter: brightness(1.02);
+        box-shadow: 0 18px 36px rgba(75, 35, 140, 0.5);
+        filter: brightness(1.05);
       }
 
       .trust-bar {
@@ -429,7 +432,7 @@
       .tag {
         padding: 8px 14px;
         border-radius: var(--radius-pill);
-        background: rgba(104, 70, 255, 0.12);
+        background: rgba(91, 58, 157, 0.12);
         color: var(--purple);
         font-weight: 600;
         font-size: 0.85rem;
@@ -459,7 +462,7 @@
         width: 52px;
         height: 52px;
         border-radius: 18px;
-        background: linear-gradient(140deg, rgba(104, 70, 255, 0.16), rgba(29, 139, 255, 0.16));
+        background: linear-gradient(140deg, rgba(91, 58, 157, 0.16), rgba(106, 76, 158, 0.16));
         display: grid;
         place-items: center;
         color: var(--purple);
@@ -494,12 +497,12 @@
       }
 
       .testimonial-card::before {
-        content: """;
+        content: '"';
         position: absolute;
         top: 18px;
         right: 28px;
         font-size: 4rem;
-        color: rgba(104, 70, 255, 0.18);
+        color: rgba(91, 58, 157, 0.18);
         line-height: 1;
       }
 
@@ -520,7 +523,7 @@
         width: 48px;
         height: 48px;
         border-radius: 50%;
-        background: linear-gradient(140deg, rgba(104, 70, 255, 0.3), rgba(29, 139, 255, 0.3));
+        background: linear-gradient(140deg, rgba(91, 58, 157, 0.3), rgba(106, 76, 158, 0.3));
         display: grid;
         place-items: center;
         color: white;
@@ -553,7 +556,7 @@
       }
 
       .insight-visual {
-        background: linear-gradient(135deg, rgba(104, 70, 255, 0.75), rgba(29, 139, 255, 0.75));
+        background: linear-gradient(135deg, rgba(91, 58, 157, 0.75), rgba(106, 76, 158, 0.75));
         position: relative;
       }
 
@@ -586,7 +589,7 @@
       }
 
       .cta-band {
-        background: linear-gradient(135deg, var(--purple), var(--blue));
+        background: linear-gradient(135deg, var(--purple) 0%, var(--purple) 75%, var(--black) 100%);
         color: white;
         padding: 72px 4vw;
         position: relative;
@@ -634,7 +637,7 @@
       .primary-cta {
         background: white;
         color: var(--purple);
-        box-shadow: 0 18px 40px rgba(19, 80, 174, 0.35);
+        box-shadow: 0 18px 40px rgba(91, 58, 157, 0.35);
       }
 
       .primary-cta:hover {
@@ -739,13 +742,24 @@
         }
 
         .nav {
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
+          gap: 12px;
+        }
+
+        .brand {
+          flex-shrink: 0;
         }
 
         .nav-links {
-          width: 100%;
-          justify-content: flex-start;
-          gap: 16px;
+          flex: 1;
+          justify-content: flex-end;
+          gap: 12px;
+          min-width: 0;
+        }
+
+        .nav-links a {
+          font-size: 0.85rem;
+          white-space: nowrap;
         }
 
         .hero {
@@ -927,13 +941,14 @@
 
       /* Jobs listing section */
       .jobs-section {
-        padding: 60px 4vw;
+        padding: 10px 4vw 20px 4vw;
         background: var(--surface-muted);
       }
 
       .jobs-container {
         margin: 0 auto;
         max-width: var(--max-width);
+        scroll-margin-top: 80px;
       }
 
       .jobs-scroll-area {
@@ -991,11 +1006,27 @@
         gap: 16px;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
         cursor: pointer;
+        position: relative;
+        overflow: hidden;
       }
 
       .job-item:hover {
         transform: translateY(-2px);
         box-shadow: var(--shadow-card);
+      }
+
+      /* Gold corner sash for user-submitted jobs */
+      .job-item[data-user-submitted="true"]::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 45px 45px 0 0;
+        border-color: #D5A848 transparent transparent transparent;
+        z-index: 1;
       }
 
       .job-item-header {
@@ -1107,7 +1138,7 @@
         }
 
         .jobs-section {
-          padding: 32px 4vw;
+          padding: 12px 4vw 32px 4vw;
         }
 
         .jobs-header {
@@ -1139,9 +1170,9 @@
         font-size: 0.95rem;
         font-weight: 700;
         color: white;
-        background: linear-gradient(135deg, var(--purple), var(--blue));
+        background: var(--purple);
         cursor: pointer;
-        box-shadow: 0 4px 12px rgba(91, 58, 157, 0.3);
+        box-shadow: 0 4px 12px rgba(75, 35, 140, 0.35);
         transition: transform 0.2s ease, box-shadow 0.2s ease;
         display: inline-flex;
         align-items: center;
@@ -1154,7 +1185,7 @@
 
       .subscribe-button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(91, 58, 157, 0.4);
+        box-shadow: 0 6px 16px rgba(75, 35, 140, 0.5);
       }
 
       .subscribe-button.subscribed {
@@ -1328,15 +1359,15 @@
         font-size: 1rem;
         font-weight: 700;
         color: white;
-        background: linear-gradient(135deg, var(--purple), var(--blue));
+        background: var(--purple);
         cursor: pointer;
-        box-shadow: 0 4px 12px rgba(91, 58, 157, 0.3);
+        box-shadow: 0 4px 12px rgba(75, 35, 140, 0.35);
         transition: transform 0.2s ease, box-shadow 0.2s ease;
       }
 
       .form-submit-button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(91, 58, 157, 0.4);
+        box-shadow: 0 6px 16px rgba(75, 35, 140, 0.5);
       }
 
       .form-submit-button:disabled {
@@ -1506,6 +1537,93 @@
         color: #dc2626;
         margin-left: 2px;
       }
+
+      /* Desktop-only search section title */
+      .search-section-title {
+        color: white;
+        font-size: 2rem;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 32px;
+        letter-spacing: -0.02em;
+      }
+
+      @media (max-width: 768px) {
+        .search-section-title {
+          display: none;
+        }
+      }
+
+      /* Developer Footer */
+      .developer-footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 16px;
+        background-color: transparent;
+        margin: 0;
+      }
+
+      .developer-text {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        font-weight: 400;
+      }
+
+      .linkedin-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        transition: all 0.2s ease;
+        text-decoration: none;
+      }
+
+      .linkedin-link:hover {
+        color: #0a66c2; /* LinkedIn brand color */
+        transform: translateY(-2px);
+      }
+
+      .linkedin-icon {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* Desktop: Footer styling */
+      @media (min-width: 769px) {
+        .developer-footer {
+          background-color: var(--bg-secondary);
+          border-top: 1px solid var(--border-color);
+          padding: 10px 16px;
+        }
+
+        .developer-text {
+          font-size: 0.875rem;
+        }
+
+        .linkedin-icon {
+          width: 20px;
+          height: 20px;
+        }
+      }
+
+      /* Mobile: Keep footer in natural position (between search and jobs) */
+      @media (max-width: 768px) {
+        .developer-footer {
+          padding: 12px 16px;
+          gap: 6px;
+        }
+
+        .developer-text {
+          font-size: 0.7rem;
+        }
+
+        .linkedin-icon {
+          width: 14px;
+          height: 14px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -1513,11 +1631,12 @@
       <header>
         <nav class="nav">
           <div class="brand">
-            <div class="brand-mark">JB</div>
-            GigSafe Job Board
+            <div class="brand-mark">
+              <img src="/attached_assets/GigSafe_Logo_1762548362018.png" alt="GigSafe Logo" />
+            </div>
+            GigSafe's Final Mile Board
           </div>
           <div class="nav-links">
-            <a href="/post-job.html">Post a Job</a>
             <button class="subscribe-button" id="subscribeButton" aria-label="Subscribe to job alerts">
               <svg class="bell-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
@@ -1532,6 +1651,10 @@
       <main>
         <section class="hero">
           <div class="hero-content">
+            <h1 class="search-section-title">
+              List of Publicly Available Job Postings
+              <div style="font-size: 0.6em; font-weight: 500; margin-top: 8px; opacity: 0.9;">(Updated Weekly)</div>
+            </h1>
             <div class="search-card">
               <div class="search-group">
                 <label class="search-label" for="keyword">Keyword</label>
@@ -1608,13 +1731,14 @@
                 <label class="search-label" for="vehicle">Vehicle</label>
                 <select class="search-select" id="vehicle" name="vehicle">
                   <option>Any</option>
-                  <option>Bicycle</option>
                   <option>Sedan</option>
                   <option>SUV</option>
                   <option>Truck</option>
                   <option>Mini Van</option>
                   <option>Cargo/Sprinter Van</option>
                   <option>Box Truck</option>
+                  <option>Bike</option>
+                  <option>Foot</option>
                 </select>
               </div>
               <div class="search-group">
@@ -1627,16 +1751,12 @@
                   name="certifications"
                 >
                   <option value="">None</option>
-                  <option value="HIPPA">HIPPA</option>
+                  <option value="HIPAA">HIPAA</option>
                   <option value="BPP">BPP</option>
-                  <option value="STA">STA</option>
-                  <option value="TSA">TSA</option>
                   <option value="TWIC">TWIC</option>
-                  <option value="CDA">CDA</option>
-                  <option value="NSA">NSA</option>
-                  <option value="CIA">CIA</option>
-                  <option value="FBI">FBI</option>
-                  <option value="PBS">PBS</option>
+                  <option value="TSA">TSA</option>
+                  <option value="STA">STA</option>
+                  <option value="HAZMAT">HAZMAT</option>
                 </select>
               </div>
               <div class="search-actions">
@@ -1655,6 +1775,20 @@
             </div>
           </div>
         </section>
+
+        <!-- Developer Credit Footer (Mobile Position) -->
+        <footer class="developer-footer">
+          <span class="developer-text">Developed by: Jimmy Thompson</span>
+          <a href="https://www.linkedin.com/in/jimmy-thompson-173911134/" 
+             target="_blank" 
+             rel="noopener noreferrer" 
+             class="linkedin-link"
+             aria-label="Jimmy Thompson's LinkedIn Profile">
+            <svg class="linkedin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path>
+            </svg>
+          </a>
+        </footer>
 
         <!-- Jobs Listing Section -->
         <section class="jobs-section">
@@ -1893,6 +2027,123 @@
         }
       })();
 
+      // Job Impression Tracking System
+      (function() {
+        let impressionBatch = [];
+        let impressionBatchTimer = null;
+        const BATCH_INTERVAL = 5000; // Send batch every 5 seconds
+        const MAX_BATCH_SIZE = 20; // Max 20 impressions per batch
+        
+        // Get or create impression tracking set for this session
+        let trackedImpressions = new Set();
+        try {
+          const stored = sessionStorage.getItem('tracked_job_impressions');
+          if (stored) {
+            trackedImpressions = new Set(JSON.parse(stored));
+          }
+        } catch (e) {
+          console.warn('Failed to load tracked impressions:', e);
+        }
+
+        // Save tracked impressions to session storage
+        function saveTrackedImpressions() {
+          try {
+            sessionStorage.setItem('tracked_job_impressions', 
+              JSON.stringify(Array.from(trackedImpressions)));
+          } catch (e) {
+            console.warn('Failed to save tracked impressions:', e);
+          }
+        }
+
+        // Send batch of impressions to server
+        function sendImpressionBatch() {
+          if (impressionBatch.length === 0) return;
+
+          const batch = [...impressionBatch];
+          impressionBatch = [];
+
+          // Send all impressions in batch
+          batch.forEach(impression => {
+            trackEvent('job_impression', impression);
+          });
+
+          console.log(`Sent ${batch.length} job impressions`);
+        }
+
+        // Track a job impression
+        window.trackJobImpression = function(jobId, jobTitle, jobCompany, jobLocation) {
+          // De-duplicate: only track once per session
+          if (trackedImpressions.has(jobId)) {
+            return;
+          }
+
+          trackedImpressions.add(jobId);
+          saveTrackedImpressions();
+
+          // Add to batch
+          impressionBatch.push({
+            job_id: jobId,
+            title: jobTitle,
+            company: jobCompany,
+            location: jobLocation
+          });
+
+          // If batch is full, send immediately
+          if (impressionBatch.length >= MAX_BATCH_SIZE) {
+            clearTimeout(impressionBatchTimer);
+            sendImpressionBatch();
+          } else {
+            // Otherwise, schedule batch send
+            clearTimeout(impressionBatchTimer);
+            impressionBatchTimer = setTimeout(sendImpressionBatch, BATCH_INTERVAL);
+          }
+        };
+
+        // Intersection Observer for tracking job card visibility
+        let jobImpressionObserver = null;
+
+        window.initJobImpressionTracking = function() {
+          // Disconnect existing observer
+          if (jobImpressionObserver) {
+            jobImpressionObserver.disconnect();
+          }
+
+          // Create new observer
+          jobImpressionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              // Only track if card is 50% visible
+              if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+                const card = entry.target;
+                const jobId = card.dataset.jobId;
+                const jobTitle = card.querySelector('.job-item-title')?.textContent || '';
+                const jobCompany = card.querySelector('.job-item-company')?.textContent || '';
+                const jobLocation = card.querySelector('.job-item-location')?.textContent || '';
+
+                if (jobId) {
+                  trackJobImpression(jobId, jobTitle, jobCompany, jobLocation);
+                  // Stop observing this card after tracking
+                  jobImpressionObserver.unobserve(card);
+                }
+              }
+            });
+          }, {
+            threshold: [0.5], // Track when 50% visible
+            rootMargin: '0px'
+          });
+
+          // Observe all job cards
+          const jobCards = document.querySelectorAll('.job-item[data-job-id]');
+          jobCards.forEach(card => {
+            jobImpressionObserver.observe(card);
+          });
+        };
+
+        // Send any remaining impressions before page unload
+        window.addEventListener('beforeunload', () => {
+          sendImpressionBatch();
+        });
+      })();
+
       // Jobs infinite scroll functionality
       console.log("==============================");
       console.log("Jobs script initializing...");
@@ -1950,19 +2201,32 @@
 
       // Certifications data
       const selectedCertifications = [];
-      const pastelColors = [
-        "#FFE5E5", // light pink
-        "#E5F3FF", // light blue
-        "#E5FFE5", // light green
-        "#FFE5FF", // light purple
-        "#FFF5E5", // light orange
-        "#FFFFE5", // light yellow
-        "#E5FFFF", // light cyan
-        "#F5E5FF", // light lavender
-        "#FFE5EC", // light peach
-        "#E5FFF5", // light mint
-      ];
-      let colorIndex = 0;
+
+      // Consistent color mapping for certifications
+      const certificationColors = {
+        'HIPAA': { bg: '#E8D5F2', text: '#6B3FA0' },      // Soft lavender (medical/health)
+        'BPP': { bg: '#D5E8F7', text: '#2E5C8A' },        // Light blue (professional)
+        'TWIC': { bg: '#D5F2E8', text: '#2E8A6B' },       // Soft teal (maritime/security)
+        'TSA': { bg: '#FFE5CC', text: '#CC7A29' },        // Light orange (aviation)
+        'STA': { bg: '#D5F7E8', text: '#2E8A5C' },        // Soft green (aviation/security)
+        'HAZMAT': { bg: '#FFD5D5', text: '#CC4040' }      // Light coral (caution/safety)
+      };
+
+      // Consistent color mapping for vehicle types
+      const vehicleColors = {
+        'Car': { bg: '#E3F2FD', text: '#1565C0' },        // Light blue
+        'Van': { bg: '#F3E5F5', text: '#7B1FA2' },        // Light purple
+        'Truck': { bg: '#FFF3E0', text: '#E65100' },      // Light orange
+        'SUV': { bg: '#E8F5E9', text: '#2E7D32' },        // Light green
+        'Bike': { bg: '#FCE4EC', text: '#C2185B' },       // Light pink
+        'Motorcycle': { bg: '#FFF9C4', text: '#F57F17' }, // Light yellow
+        'Box Truck': { bg: '#FFECB3', text: '#FF6F00' },  // Light amber
+        'Cargo Van': { bg: '#E1BEE7', text: '#6A1B9A' },  // Light deep purple
+        'Sprinter Van': { bg: '#D1C4E9', text: '#512DA8' } // Light indigo
+      };
+
+      // Fallback colors for unknown types
+      const defaultTagColor = { bg: '#F5F5F5', text: '#616161' };
 
       function setSearchLoading(isSearching) {
         if (!searchButton) {
@@ -1991,13 +2255,19 @@
       }
 
       function getCurrentFilters() {
-        return normalizeFilters({
+        console.log("🔍 getCurrentFilters() called");
+        console.log("🔍 selectedCertifications array:", selectedCertifications);
+        const rawFilters = {
           keyword: keywordInput?.value,
           state: stateSelect?.value,
           city: citySelect?.value,
           vehicle: vehicleSelect?.value,
           certifications: [...selectedCertifications],
-        });
+        };
+        console.log("🔍 Raw filters before normalize:", rawFilters);
+        const normalized = normalizeFilters(rawFilters);
+        console.log("🔍 Normalized filters:", normalized);
+        return normalized;
       }
 
       function shouldUseFuzzySearch(filters) {
@@ -2082,13 +2352,13 @@
       if (citySelect) {
         citySelect.addEventListener("change", () => {
           console.log("City changed to:", citySelect.value || "Any");
-          
+
           // Track filter change
           trackEvent('filter_change', {
             filter_type: 'city',
             value: citySelect.value || 'Any'
           });
-          
+
           // Trigger search with new city filter
           triggerSearch();
         });
@@ -2098,13 +2368,13 @@
       if (vehicleSelect) {
         vehicleSelect.addEventListener("change", () => {
           console.log("Vehicle changed to:", vehicleSelect.value || "Any");
-          
+
           // Track filter change
           trackEvent('filter_change', {
             filter_type: 'vehicle',
             value: vehicleSelect.value || 'Any'
           });
-          
+
           // Trigger search with new vehicle filter
           triggerSearch();
         });
@@ -2113,24 +2383,26 @@
       // Certifications tag management
       function addCertification(cert) {
         if (!cert || selectedCertifications.includes(cert)) {
+          console.log("⚠️ Cert already selected or invalid:", cert);
           return;
         }
 
-        console.log("Adding certification:", cert);
+        console.log("✅ Adding certification:", cert);
 
         // Add to selected array
         selectedCertifications.push(cert);
+        console.log("✅ selectedCertifications array is now:", selectedCertifications);
 
         // Create tag element
         const tag = document.createElement("div");
         tag.className = "cert-tag";
         tag.dataset.cert = cert;
 
-        // Get pastel color
-        const color = pastelColors[colorIndex % pastelColors.length];
-        colorIndex++;
-        tag.style.backgroundColor = color;
-        tag.style.color = "#333";
+        // Get colors from color map
+        const colors = certificationColors[cert] || defaultTagColor;
+        tag.style.backgroundColor = colors.bg;
+        tag.style.color = colors.text;
+        tag.style.fontWeight = "600";
 
         // Tag content
         tag.innerHTML = `
@@ -2166,12 +2438,13 @@
       }
 
       function removeCertification(cert) {
-        console.log("Removing certification:", cert);
+        console.log("❌ Removing certification:", cert);
 
         // Remove from selected array
         const index = selectedCertifications.indexOf(cert);
         if (index > -1) {
           selectedCertifications.splice(index, 1);
+          console.log("❌ selectedCertifications array is now:", selectedCertifications);
         }
 
         // Remove tag element
@@ -2193,26 +2466,50 @@
         if (selectedCertifications.length === 0 && certificationsContainer) {
           certificationsContainer.style.display = "none";
         }
+
+        // Auto-trigger search when certification is removed
+        console.log("❌ About to call fetchJobs(1) - AUTO-TRIGGER ON REMOVE");
+        fetchJobs(1, null, false);
+        console.log("❌ fetchJobs(1) call completed");
       }
 
       // Handle certification selection
       if (certificationsSelect) {
         certificationsSelect.addEventListener("change", (e) => {
+          console.log("🔵 Certification dropdown changed!");
           const cert = e.target.value;
+          console.log("🔵 Selected cert value:", cert);
           if (cert) {
+            console.log("🔵 About to call addCertification()");
             addCertification(cert);
+            console.log("🔵 addCertification() completed");
+            console.log("🔵 About to call fetchJobs(1) - AUTO-TRIGGER");
+            // Auto-trigger search when certification is selected
+            fetchJobs(1, null, false);
+            console.log("🔵 fetchJobs(1) call completed");
           }
         });
       }
 
-      async function fetchJobs(page = 1, filtersOverride = null) {
-        console.log(`fetchJobs called with page: ${page}`);
+      function scrollToJobsSection() {
+        const jobsContainer = document.querySelector('.jobs-container');
+        
+        if (jobsContainer && jobsScrollArea) {
+          jobsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          jobsScrollArea.scrollTop = 0;
+        }
+      }
+
+      async function fetchJobs(page = 1, filtersOverride = null, isManualSearch = false) {
+        console.log(`fetchJobs called with page: ${page}, isManualSearch: ${isManualSearch}`);
         console.log("isLoading:", isLoading);
         console.log("hasMoreJobs:", hasMoreJobs);
 
         const isNewSearch = page === 1;
-        const filtersSource =
-          filtersOverride ?? activeFilters ?? getCurrentFilters();
+        // For new searches, always get current filters to pick up certification changes
+        const filtersSource = isNewSearch && !filtersOverride
+          ? getCurrentFilters()
+          : (filtersOverride ?? activeFilters ?? getCurrentFilters());
         const filters = normalizeFilters(filtersSource);
 
         if (!activeFilters || isNewSearch || filtersOverride) {
@@ -2220,6 +2517,8 @@
             ...filters,
             certifications: [...filters.certifications],
           };
+          console.log("📊 Active filters set to:", activeFilters);
+          console.log("📊 Certifications in filter:", activeFilters.certifications);
         }
 
         if (isLoading || (!hasMoreJobs && !isNewSearch)) {
@@ -2300,6 +2599,10 @@
           updateJobsCount();
           currentPage = page;
 
+          if (isNewSearch && isManualSearch) {
+            scrollToJobsSection();
+          }
+
           console.log("Page loaded successfully");
           console.log(`  Total jobs: ${totalJobs}`);
           console.log(`  Loaded so far: ${loadedJobs}`);
@@ -2359,6 +2662,11 @@
           jobsGrid.appendChild(jobCard);
           loadedJobs += 1;
         });
+
+        // Initialize impression tracking for newly rendered jobs
+        if (typeof window.initJobImpressionTracking === 'function') {
+          window.initJobImpressionTracking();
+        }
       }
 
       function showJobsError(message) {
@@ -2378,6 +2686,7 @@
       function createJobCard(job) {
         const card = document.createElement("div");
         card.className = "job-item";
+        card.dataset.jobId = job.id; // Store job ID for impression tracking
         card.onclick = () => {
           // Track job click with Posthog
           if (typeof posthog !== "undefined") {
@@ -2394,6 +2703,7 @@
 
           // Track job click with custom analytics
           trackEvent('job_click', {
+            job_id: job.id,
             title: job.title,
             company: job.company,
             location: `${job.city}, ${job.state}`
@@ -2403,10 +2713,33 @@
           window.open(job.job_url, "_blank");
         };
 
+        // Apply gold styling and sash if user-submitted
+        if (job.submitted_at) {
+          card.classList.add("job-item--user-submitted"); // Add a class for potential future styling
+          card.dataset.userSubmitted = "true"; // Add a data attribute for CSS targeting
+        }
+
+
         const location =
           [job.city, job.state].filter(Boolean).join(", ") ||
           "Location not specified";
         const description = job.description || "No description available";
+
+        let certificationBadges = '';
+        if (job.certifications_required) {
+          const certs = job.certifications_required.split(',').map(c => c.trim()).filter(Boolean);
+          certificationBadges = certs.map(cert => {
+            const colors = certificationColors[cert] || defaultTagColor;
+            return `<span class="job-tag cert-tag" style="background-color: ${colors.bg}; color: ${colors.text}; font-weight: 600;">${escapeHtml(cert)}</span>`;
+          }).join('');
+        }
+
+        let vehicleBadge = '';
+        if (job.vehicle_requirements) {
+          const vehicle = job.vehicle_requirements.trim();
+          const colors = vehicleColors[vehicle] || defaultTagColor;
+          vehicleBadge = `<span class="job-tag vehicle-tag" style="background-color: ${colors.bg}; color: ${colors.text}; font-weight: 600;">${escapeHtml(vehicle)}</span>`;
+        }
 
         card.innerHTML = `
           <div class="job-item-header">
@@ -2419,7 +2752,12 @@
           </div>
           <div class="job-item-description">${escapeHtml(description)}</div>
           <div class="job-item-tags">
-            ${job.vehicle_requirements ? `<span class="job-tag">${escapeHtml(job.vehicle_requirements)}</span>` : ""}
+<<<<<<<< HEAD:App/landing.html
+            ${job.vehicle_requirements ? `<span class="job-tag">${escapeHtml(job.vehicle_requirements)}</span>` : ''}
+========
+            ${vehicleBadge}
+            ${certificationBadges}
+>>>>>>>> fd22d654a0fc913ce951d0f02d01fe260d87b2cc:App/index.html
           </div>
         `;
 
@@ -2440,9 +2778,14 @@
 
         observer?.disconnect();
 
-        const observerOptions = jobsScrollArea
-          ? { root: jobsScrollArea, rootMargin: "0px 0px 200px 0px" }
-          : { root: null, rootMargin: "0px 0px 200px 0px" };
+        // Check if we're on mobile (no max-height on scroll area)
+        const isMobile = window.innerWidth <= 768;
+
+        // On mobile, use viewport (root: null) for scrolling detection
+        // On desktop, use the scroll area container
+        const observerOptions = isMobile
+          ? { root: null, rootMargin: "0px 0px 200px 0px" }
+          : { root: jobsScrollArea, rootMargin: "0px 0px 200px 0px" };
 
         observer = new IntersectionObserver((entries) => {
           const [entry] = entries;
@@ -2455,6 +2798,15 @@
 
         observer.observe(jobsSentinel);
       }
+
+      // Re-setup observer on window resize to handle mobile/desktop transitions
+      let resizeTimeout;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          setupIntersectionObserver();
+        }, 250);
+      });
 
       // Update Fuse.js index with loaded jobs
       function updateFuseIndex() {
@@ -2511,7 +2863,7 @@
         console.log("Search triggered!");
 
         const filters = getCurrentFilters();
-        
+
         // Track analytics - search or filter
         if (filters.keyword) {
           trackEvent('search', { keyword: filters.keyword });
@@ -2523,7 +2875,7 @@
             vehicle: filters.vehicle 
           });
         }
-        
+
         const useFuzzy = shouldUseFuzzySearch(filters);
 
         if (useFuzzy) {
@@ -2543,7 +2895,7 @@
         }
 
         console.log("Fetching from server with filters");
-        fetchJobs(1, filters);
+        fetchJobs(1, filters, false);
       }
       // Initialize
       document.addEventListener("DOMContentLoaded", () => {
@@ -2553,13 +2905,48 @@
         // Load cities data first
         loadCitiesData();
 
-        // Setup search button
+        // Setup search button - ONLY button click triggers auto-scroll
         if (searchButton) {
-          searchButton.addEventListener("click", triggerSearch);
+          searchButton.addEventListener("click", () => {
+            const filters = getCurrentFilters();
+            
+            // Track analytics
+            if (filters.keyword) {
+              trackEvent('search', { keyword: filters.keyword });
+            }
+            if (filters.state || filters.city || filters.vehicle !== 'Any') {
+              trackEvent('filter', { 
+                state: filters.state, 
+                city: filters.city, 
+                vehicle: filters.vehicle 
+              });
+            }
+
+            const useFuzzy = shouldUseFuzzySearch(filters);
+
+            if (useFuzzy) {
+              console.log(
+                "Using client-side fuzzy search on",
+                allLoadedJobs.length,
+                "loaded jobs",
+              );
+              setSearchLoading(true);
+              activeFilters = {
+                ...filters,
+                certifications: [...filters.certifications],
+              };
+              applyFuzzySearch(filters.keyword);
+              setSearchLoading(false);
+              return;
+            }
+
+            console.log("Fetching from server with filters - BUTTON CLICK WITH SCROLL");
+            fetchJobs(1, filters, true);
+          });
           console.log("Search button event listener attached");
         }
 
-        // Setup Enter key on keyword input
+        // Setup Enter key on keyword input - NO auto-scroll
         if (keywordInput) {
           keywordInput.addEventListener("keypress", (e) => {
             if (e.key === "Enter") {
@@ -2600,12 +2987,10 @@
         // Check subscription state on load
         updateSubscribeButton();
 
-        if (subscribeButton && subscribeModal) {
-          // Open modal when subscribe button is clicked
+        if (subscribeButton) {
+          // Open Paperform in new tab when subscribe button is clicked
           subscribeButton.addEventListener("click", () => {
-            if (subscribeButton.disabled) return; // Don't open if subscribed
-            subscribeModal.classList.add("active");
-            document.body.style.overflow = "hidden"; // Prevent background scrolling
+            window.open('https://dnwfrabb.paperform.co/', '_blank');
           });
 
           // Close modal when close button is clicked
@@ -2872,7 +3257,7 @@
               );
 
               console.log("Response received:", response.status, response.statusText);
-              
+
               const result = await response.json();
               console.log("Response body:", result);
 
@@ -2927,7 +3312,7 @@
         }
 
         // Load jobs
-        fetchJobs(1);
+        fetchJobs(1, null, false);
         setupIntersectionObserver();
 
         console.log("Initialization complete");

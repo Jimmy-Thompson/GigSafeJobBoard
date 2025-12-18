@@ -1,21 +1,45 @@
-import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import session from 'express-session';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import createDOMPurify from 'dompurify';
+import { JSDOM } from 'jsdom';
+import sqliteStoreFactory from 'connect-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { getDb, getUserDb, closeDb } from './shared/db.js';
-import { Client } from 'pg';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5000;
+
+// Initialize DOMPurify for server-side XSS protection
+const window = new JSDOM('').window;
+const DOMPurify = createDOMPurify(window);
+
+// Security logging function
+function logSecurityEvent(eventType, details) {
+  const timestamp = new Date().toISOString();
+  const logEntry = `[SECURITY] ${timestamp} - ${eventType}: ${JSON.stringify(details)}`;
+  console.log(logEntry);
+  
+  // Also write to security log file
+  const logDir = path.join(__dirname, 'logs');
+  fs.mkdirSync(logDir, { recursive: true });
+  const logFile = path.join(logDir, 'security.log');
+  fs.appendFileSync(logFile, logEntry + '\n');
+}
+
+// Failed login tracking (in-memory, could be moved to database for persistence)
+const loginAttempts = new Map();
+const LOGIN_ATTEMPT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const MAX_LOGIN_ATTEMPTS = 5;
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -32,25 +56,205 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit per file
+  limits: { 
+    fileSize: 10 * 1024 * 1024, // 10MB limit per file
+    files: 10 // Max 10 files
+  },
   fileFilter: (req, file, cb) => {
-    // Allow images and PDFs
-    const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
+    // Strict file type validation
+    const allowedMimeTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    
+    const allowedExtensions = /\.(jpe?g|png|gif|pdf|doc|docx)$/i;
+    
+    if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.test(file.originalname)) {
       return cb(null, true);
     } else {
+      logSecurityEvent('FILE_UPLOAD_REJECTED', { 
+        filename: file.originalname, 
+        mimetype: file.mimetype 
+      });
       cb(new Error('Only images, PDFs, and Word documents are allowed'));
     }
   }
 });
 
-app.use(cors());
-app.use(express.json());
+// Security Headers with Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: [
+        "'self'", 
+        "'unsafe-inline'",
+        'https://fonts.googleapis.com'
+      ],
+      scriptSrc: [
+        "'self'", 
+        "'unsafe-inline'",
+        'https://cdn.jsdelivr.net',
+        'https://us.i.posthog.com',
+        'https://us-assets.i.posthog.com'
+      ],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: [
+        "'self'",
+        'https://us.i.posthog.com'
+      ],
+      fontSrc: [
+        "'self'",
+        'https://fonts.gstatic.com'
+      ],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
 
-// Session management for admin authentication
+// CORS Configuration - Restrict to your actual domains
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',') 
+  : [
+      'http://localhost:5000', 
+      'http://localhost:8000',
+      'http://127.0.0.1:5000',
+      'http://127.0.0.1:8000'
+    ];
+
+// In production deployment, add your actual domain
+if (process.env.REPLIT_DEPLOYMENT === '1' && process.env.REPLIT_DOMAINS) {
+  const replitDomains = process.env.REPLIT_DOMAINS.split(',').map(d => `https://${d}`);
+  allowedOrigins.push(...replitDomains);
+}
+
+// Helper function to check if origin is allowed
+const isOriginAllowed = (origin) => {
+  // Check explicit allowlist
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+  
+  // In development on Replit (not deployed), allow all *.replit.dev URLs
+  // This is safe because: 1) only for dev, 2) rate limiting still active, 3) auth still required
+  if (process.env.REPL_ID && !process.env.REPLIT_DEPLOYMENT) {
+    if (origin && origin.match(/^https:\/\/.*\.replit\.dev$/)) {
+      return true;
+    }
+  }
+  
+  return false;
+};
+
+// CORS middleware for API routes only - balanced security
+const apiCorsMiddleware = (req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // If origin header is present, validate it
+  if (origin) {
+    if (!isOriginAllowed(origin)) {
+      logSecurityEvent('CORS_BLOCKED', { origin });
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Not allowed by CORS' 
+      });
+    }
+    
+    // Set CORS headers for allowed origin
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // Handle preflight
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+  }
+  // Note: If no origin header (same-origin requests), allow through
+  // Other security layers protect against abuse: rate limiting, authentication, input validation
+  
+  next();
+};
+
+// Apply CORS middleware ONLY to /api routes (not static files)
+// This allows browsers to load HTML/JS without Origin header while protecting API endpoints
+app.use('/api', apiCorsMiddleware);
+
+app.use(express.json({ limit: '1mb' })); // Limit request body size
+
+// Trust proxy configuration for Replit environment
+// Replit always sets X-Forwarded-For, so we need to trust proxy on Replit
+// In true local development (not on Replit), trust proxy should be disabled
+const isReplit = process.env.REPL_ID || process.env.REPLIT_DEPLOYMENT === '1';
+if (isReplit || process.env.NODE_ENV === 'production') {
+  // Trust proxy on Replit or in production - proxy handles X-Forwarded-For correctly
+  app.set('trust proxy', 1);
+  console.log('Trust proxy enabled (Replit/Production environment)');
+} else {
+  console.log('Trust proxy disabled (local development)');
+}
+
+// Rate Limiters
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: { success: false, error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes  
+  max: 20, // Stricter limit for sensitive operations
+  message: { success: false, error: 'Too many requests, please try again later.' },
+  skipSuccessfulRequests: true,
+});
+
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Only 5 login attempts per 15 minutes
+  message: { success: false, error: 'Too many login attempts, please try again later.' },
+  skipSuccessfulRequests: true,
+  handler: (req, res) => {
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', { 
+      endpoint: '/api/admin/login',
+      ip: req.ip 
+    });
+    res.status(429).json({ 
+      success: false, 
+      error: 'Too many login attempts, please try again later.' 
+    });
+  }
+});
+
+const jobPostingLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Max 5 job postings per hour per IP
+  message: { success: false, error: 'Too many job postings, please try again later.' },
+  skipSuccessfulRequests: false,
+});
+
+const subscriptionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Max 3 subscriptions per hour per IP
+  message: { success: false, error: 'Too many subscription attempts, please try again later.' },
+  skipSuccessfulRequests: true,
+});
+
+// Apply general rate limiter to all routes
+app.use(generalLimiter);
+
+// Session management with persistent SQLite store
 const sessionSecret = process.env.ADMIN_SESSION_SECRET;
 if (!sessionSecret) {
   console.error('FATAL: ADMIN_SESSION_SECRET environment variable is not set.');
@@ -59,16 +263,50 @@ if (!sessionSecret) {
   process.exit(1);
 }
 
+// Validate admin password strength at startup
+const adminPassword = process.env.ADMIN_PASSWORD;
+if (!adminPassword) {
+  console.error('FATAL: ADMIN_PASSWORD environment variable is not set.');
+  console.error('The admin portal requires a password for security.');
+  process.exit(1);
+}
+if (adminPassword.length < 8) {
+  console.error('FATAL: ADMIN_PASSWORD must be at least 8 characters long.');
+  console.error(`Current password length: ${adminPassword.length} characters`);
+  console.error('Please set a stronger password in your environment variables.');
+  process.exit(1);
+}
+
+const SQLiteStore = sqliteStoreFactory(session);
+
+// Determine if we should use secure cookies (HTTPS only)
+// Secure cookies on Replit deployment OR when NODE_ENV=production
+const useSecureCookies = process.env.NODE_ENV === 'production' || 
+                          process.env.REPLIT_DEPLOYMENT === '1' || 
+                          isReplit;
+
+if (useSecureCookies) {
+  console.log('Secure cookies enabled (HTTPS-only admin sessions)');
+} else {
+  console.warn('WARNING: Secure cookies disabled (development mode - not safe for production)');
+}
+
 app.use(session({
+  store: new SQLiteStore({
+    db: 'sessions.db',
+    dir: path.join(__dirname, 'outputs'),
+    table: 'sessions'
+  }),
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // Secure cookies in production
+    secure: useSecureCookies,
     httpOnly: true,
     sameSite: 'strict',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
+    maxAge: 8 * 60 * 60 * 1000 // 8 hours (reduced from 24)
+  },
+  name: 'sessionId' // Don't use default name
 }));
 
 app.use((req, res, next) => {
@@ -86,354 +324,67 @@ app.use(express.static('App', {
   extensions: ['html']
 }));
 
-app.get('/jobs/:id', async (req, res) => {
-  const jobId = Number.parseInt(req.params.id);
+// Serve attached assets (images, logos, etc.)
+app.use('/attached_assets', express.static('attached_assets'));
 
-  if (!jobId || Number.isNaN(jobId)) {
-    return res.status(404).send('Job not found');
-  }
+// Sanitization helper functions
+function sanitizeText(text, maxLength = 10000) {
+  if (!text || typeof text !== 'string') return text;
+  const trimmed = text.trim().substring(0, maxLength);
+  return DOMPurify.sanitize(trimmed, { 
+    ALLOWED_TAGS: [], 
+    ALLOWED_ATTR: [] 
+  });
+}
 
-  try {
-    const job = process.env.DB_URL
-      ? await fetchUserJobFromPostgres(jobId)
-      : fetchUserJobFromSqlite(jobId);
+function sanitizeHTML(html, maxLength = 50000) {
+  if (!html || typeof html !== 'string') return html;
+  const trimmed = html.trim().substring(0, maxLength);
+  return DOMPurify.sanitize(trimmed, {
+    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li'],
+    ALLOWED_ATTR: []
+  });
+}
 
-    if (!job) {
-      return res.status(404).send('Job not found');
-    }
+function validateEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(renderJobDetailPage(job));
-  } catch (error) {
-    console.error('Error loading job detail page:', error);
-    res.status(500).send('Failed to load job');
-  }
-});
+// Helper to check if IP is locked out
+function isIpLockedOut(ip) {
+  const attempts = loginAttempts.get(ip);
+  if (!attempts) return false;
+  
+  const now = Date.now();
+  // Remove old attempts
+  const recentAttempts = attempts.filter(time => now - time < LOGIN_ATTEMPT_WINDOW);
+  loginAttempts.set(ip, recentAttempts);
+  
+  return recentAttempts.length >= MAX_LOGIN_ATTEMPTS;
+}
+
+// Helper to record failed login
+function recordFailedLogin(ip) {
+  const attempts = loginAttempts.get(ip) || [];
+  attempts.push(Date.now());
+  loginAttempts.set(ip, attempts);
+}
 
 // Middleware to check admin authentication
 const requireAdmin = (req, res, next) => {
   if (req.session && req.session.isAdmin) {
     return next();
   }
+  logSecurityEvent('UNAUTHORIZED_ACCESS_ATTEMPT', { 
+    endpoint: req.path,
+    ip: req.ip 
+  });
   res.status(401).json({
     success: false,
     error: 'Unauthorized - Admin access required'
   });
 };
-
-const XML_EXPORT_INTERVAL_MS = Number(process.env.XML_EXPORT_INTERVAL_MS ?? 15 * 60 * 1000);
-let xmlExportInProgress = false;
-let xmlExportTimer = null;
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function formatTimestamp(value) {
-  const date = value ? new Date(value) : new Date();
-  return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
-}
-
-function runXmlExport(reason) {
-  if (!process.env.DB_URL) {
-    return;
-  }
-
-  if (xmlExportInProgress) {
-    console.log(`[xml-export] Skip (${reason}) - export already running`);
-    return;
-  }
-
-  const scriptPath = path.join(__dirname, 'scripts', 'export_user_jobs_xml.js');
-  xmlExportInProgress = true;
-
-  const child = spawn(process.execPath, [scriptPath], {
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-
-  child.stdout.on('data', (data) => {
-    console.log(`[xml-export] ${data.toString().trim()}`);
-  });
-
-  child.stderr.on('data', (data) => {
-    console.error(`[xml-export] ${data.toString().trim()}`);
-  });
-
-  child.on('close', (code) => {
-    xmlExportInProgress = false;
-    if (code !== 0) {
-      console.error(`[xml-export] Failed with code ${code}`);
-    }
-  });
-}
-
-async function fetchUserJobFromPostgres(jobId) {
-  const client = new Client({ connectionString: process.env.DB_URL });
-  await client.connect();
-
-  try {
-    const result = await client.query(
-      `
-      SELECT
-        id,
-        title,
-        company,
-        city,
-        state,
-        postalcode,
-        address,
-        description,
-        pay,
-        general_requirements,
-        benefits,
-        vehicle_requirements,
-        insurance_requirement,
-        certifications_required,
-        schedule_details,
-        submitted_at
-      FROM user_submitted_jobs
-      WHERE id = $1
-        AND hidden = false
-        AND (submitted_at IS NULL OR submitted_at > NOW() - INTERVAL '24 hours')
-      LIMIT 1
-      `,
-      [jobId]
-    );
-
-    return result.rows[0] ?? null;
-  } finally {
-    await client.end();
-  }
-}
-
-function fetchUserJobFromSqlite(jobId) {
-  const userDb = getUserDb();
-  return userDb.prepare(`
-    SELECT
-      id,
-      title,
-      company,
-      city,
-      state,
-      postalcode,
-      address,
-      description,
-      pay,
-      general_requirements,
-      benefits,
-      vehicle_requirements,
-      insurance_requirement,
-      certifications_required,
-      schedule_details,
-      submitted_at
-    FROM jobs
-    WHERE id = ?
-      AND hidden = 0
-      AND (submitted_at IS NULL OR datetime(submitted_at) > datetime('now', '-24 hours'))
-    LIMIT 1
-  `).get(jobId);
-}
-
-function renderJobDetailPage(job) {
-  const locationParts = [job.address, job.city, job.state, job.postalcode].filter(Boolean);
-  const locationText = locationParts.length > 0 ? locationParts.join(', ') : 'Location not specified';
-
-  return `
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>${escapeHtml(job.title)} - GigSafe Job Board</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        <style>
-          :root {
-            --navy: #0f193b;
-            --blue: #1d8bff;
-            --purple: #5B3A9D;
-            --text-primary: #121826;
-            --text-secondary: #4a5773;
-            --surface: #ffffff;
-            --surface-muted: #f5f7fd;
-            --border: #dde3f5;
-            --shadow-card: 0 20px 45px rgba(52, 74, 165, 0.12);
-            --radius-lg: 24px;
-            --radius-md: 16px;
-            --max-width: 980px;
-          }
-
-          * { box-sizing: border-box; }
-
-          body {
-            margin: 0;
-            font-family: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: var(--surface-muted);
-            color: var(--text-primary);
-            line-height: 1.6;
-          }
-
-          header {
-            padding: 24px 5vw;
-            background: #fff;
-            border-bottom: 1px solid var(--border);
-          }
-
-          .brand {
-            display: inline-flex;
-            align-items: center;
-            gap: 12px;
-            font-weight: 700;
-            color: var(--navy);
-            text-decoration: none;
-            font-size: 1.1rem;
-          }
-
-          .brand-mark {
-            width: 40px;
-            height: 40px;
-            border-radius: 14px;
-            background: linear-gradient(135deg, var(--purple), var(--blue));
-            display: grid;
-            place-items: center;
-            color: #fff;
-            font-weight: 700;
-          }
-
-          main {
-            padding: 48px 5vw 80px;
-          }
-
-          .card {
-            max-width: var(--max-width);
-            margin: 0 auto;
-            background: var(--surface);
-            border-radius: var(--radius-lg);
-            padding: 40px;
-            box-shadow: var(--shadow-card);
-          }
-
-          .meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            color: var(--text-secondary);
-            font-weight: 600;
-          }
-
-          .title {
-            font-size: clamp(2rem, 4vw, 2.6rem);
-            margin: 0 0 12px;
-            color: var(--navy);
-          }
-
-          .company {
-            font-size: 1.1rem;
-            color: var(--text-secondary);
-            font-weight: 600;
-          }
-
-          .pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 14px;
-            border-radius: 999px;
-            background: rgba(29, 139, 255, 0.12);
-            color: var(--blue);
-            font-weight: 600;
-            font-size: 0.9rem;
-          }
-
-          .section {
-            margin-top: 28px;
-            padding-top: 24px;
-            border-top: 1px solid var(--border);
-          }
-
-          .section h3 {
-            margin: 0 0 12px;
-            font-size: 1.1rem;
-            color: var(--navy);
-          }
-
-          .tag-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-          }
-
-          .tag {
-            padding: 6px 12px;
-            border-radius: var(--radius-md);
-            background: #f0f3ff;
-            font-weight: 600;
-            font-size: 0.9rem;
-          }
-        </style>
-      </head>
-      <body>
-        <header>
-          <a class="brand" href="/">
-            <span class="brand-mark">G</span>
-            GigSafe Job Board
-          </a>
-        </header>
-        <main>
-          <div class="card">
-            <div>
-              <h1 class="title">${escapeHtml(job.title)}</h1>
-              <div class="company">${escapeHtml(job.company)}</div>
-              <div class="meta">
-                <span>📍 ${escapeHtml(locationText)}</span>
-                <span>🗓️ ${escapeHtml(formatTimestamp(job.submitted_at))}</span>
-                ${job.pay ? `<span class="pill">${escapeHtml(job.pay)}</span>` : ''}
-              </div>
-            </div>
-
-            ${job.description ? `
-              <div class="section">
-                <h3>Description</h3>
-                <div>${escapeHtml(job.description).replace(/\\n/g, '<br />')}</div>
-              </div>
-            ` : ''}
-
-            ${(job.general_requirements || job.certifications_required) ? `
-              <div class="section">
-                <h3>Requirements</h3>
-                <div>${escapeHtml([job.general_requirements, job.certifications_required].filter(Boolean).join('\\n')).replace(/\\n/g, '<br />')}</div>
-              </div>
-            ` : ''}
-
-            ${(job.vehicle_requirements || job.insurance_requirement) ? `
-              <div class="section">
-                <h3>Vehicle & Insurance</h3>
-                <div class="tag-list">
-                  ${job.vehicle_requirements ? `<span class="tag">${escapeHtml(job.vehicle_requirements)}</span>` : ''}
-                  ${job.insurance_requirement ? `<span class="tag">${escapeHtml(job.insurance_requirement)}</span>` : ''}
-                </div>
-              </div>
-            ` : ''}
-
-            ${(job.schedule_details || job.benefits) ? `
-              <div class="section">
-                <h3>Schedule & Benefits</h3>
-                <div>${escapeHtml([job.schedule_details, job.benefits].filter(Boolean).join('\\n')).replace(/\\n/g, '<br />')}</div>
-              </div>
-            ` : ''}
-          </div>
-        </main>
-      </body>
-    </html>
-  `;
-}
 
 function buildFilters(query) {
   const keyword = query.keyword?.trim() || '';
@@ -475,8 +426,20 @@ function buildWhereClause(filters, params) {
   }
 
   if (filters.vehicle) {
-    whereConditions.push('vehicle_requirements LIKE ? COLLATE NOCASE');
-    params.push(`%${filters.vehicle}%`);
+    // Special handling for Box Truck to also match Straight Truck variants
+    if (filters.vehicle === 'Box Truck') {
+      whereConditions.push('(vehicle_requirements LIKE ? COLLATE NOCASE OR vehicle_requirements LIKE ? COLLATE NOCASE)');
+      params.push('%Box Truck%', '%Straight Truck%');
+    } 
+    // Special handling for Cargo/Sprinter Van to match both Cargo Van and Sprinter Van
+    else if (filters.vehicle === 'Cargo/Sprinter Van') {
+      whereConditions.push('(vehicle_requirements LIKE ? COLLATE NOCASE OR vehicle_requirements LIKE ? COLLATE NOCASE)');
+      params.push('%Cargo Van%', '%Sprinter Van%');
+    } 
+    else {
+      whereConditions.push('vehicle_requirements LIKE ? COLLATE NOCASE');
+      params.push(`%${filters.vehicle}%`);
+    }
   }
 
   if (filters.certifications) {
@@ -486,14 +449,12 @@ function buildWhereClause(filters, params) {
       .filter(Boolean);
 
     if (certList.length > 0) {
-      // Search in new certifications_required field first, then fallback to description/benefits/general_requirements
       const certConditions = certList
-        .map(() => 'certifications_required LIKE ? COLLATE NOCASE OR description LIKE ? COLLATE NOCASE OR benefits LIKE ? COLLATE NOCASE OR general_requirements LIKE ? COLLATE NOCASE')
+        .map(() => 'certifications_required LIKE ? COLLATE NOCASE')
         .join(' OR ');
       whereConditions.push(`(${certConditions})`);
       certList.forEach(cert => {
-        const pattern = `%${cert}%`;
-        params.push(pattern, pattern, pattern, pattern);  // certifications_required, description, benefits, general_requirements
+        params.push(`%${cert}%`);
       });
     }
   }
@@ -687,7 +648,7 @@ app.get('/api/jobs', (req, res) => {
   }
 });
 
-app.post('/api/jobs', (req, res) => {
+app.post('/api/jobs', jobPostingLimiter, (req, res) => {
   const {
     job_url,
     title,
@@ -702,26 +663,49 @@ app.post('/api/jobs', (req, res) => {
     benefits,
     vehicle_requirements,
     insurance_requirement,
+    certifications_required,
     schedule_details
   } = req.body;
 
   // Validate required fields
-  if (!title || !company || !job_url || !city || !state || !postalcode || !description || !pay) {
+  if (!title || !company || !job_url || !city || !state || !description || !pay || !postalcode) {
     return res.status(400).json({
       success: false,
       error: 'Required fields: title, company, job_url, city, state, postalcode, description, pay'
     });
   }
 
-  // Validate URL format
+  // Validate and sanitize URL
+  let validatedUrl;
   try {
-    new URL(job_url);
+    const urlObj = new URL(job_url);
+    // Only allow http and https protocols
+    if (!['http:', 'https:'].includes(urlObj.protocol)) {
+      throw new Error('Invalid protocol');
+    }
+    validatedUrl = urlObj.toString();
   } catch {
     return res.status(400).json({
       success: false,
-      error: 'Invalid job_url format'
+      error: 'Invalid job_url format. Must be a valid HTTP or HTTPS URL.'
     });
   }
+
+  // Sanitize all text inputs to prevent XSS
+  const sanitizedTitle = sanitizeText(title, 200);
+  const sanitizedCompany = sanitizeText(company, 200);
+  const sanitizedCity = sanitizeText(city, 100);
+  const sanitizedState = sanitizeText(state, 2).toUpperCase();
+  const sanitizedPostalcode = sanitizeText(postalcode, 10);
+  const sanitizedAddress = address ? sanitizeText(address, 300) : null;
+  const sanitizedDescription = sanitizeHTML(description, 10000);
+  const sanitizedRequirements = general_requirements ? sanitizeHTML(general_requirements, 5000) : null;
+  const sanitizedPay = sanitizeText(pay, 200);
+  const sanitizedBenefits = benefits ? sanitizeHTML(benefits, 5000) : null;
+  const sanitizedVehicle = vehicle_requirements ? sanitizeText(vehicle_requirements, 200) : null;
+  const sanitizedInsurance = insurance_requirement ? sanitizeText(insurance_requirement, 200) : null;
+  const sanitizedCerts = certifications_required ? sanitizeText(certifications_required, 500) : null;
+  const sanitizedSchedule = schedule_details ? sanitizeHTML(schedule_details, 2000) : null;
 
   const userDb = getUserDb();
 
@@ -741,36 +725,42 @@ app.post('/api/jobs', (req, res) => {
         benefits,
         vehicle_requirements,
         insurance_requirement,
+        certifications_required,
         schedule_details,
         source_company,
         submitted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       RETURNING *
     `).get(
-      job_url,
-      title.trim(),
-      company.trim(),
-      city.trim(),
-      state.trim().toUpperCase(),
-      postalcode.trim(),
-      address?.trim() || null,
-      description.trim(),
-      general_requirements?.trim() || null,
-      pay.trim(),
-      benefits?.trim() || null,
-      vehicle_requirements?.trim() || null,
-      insurance_requirement?.trim() || null,
-      schedule_details?.trim() || null,
-      company.trim()
+      validatedUrl,
+      sanitizedTitle,
+      sanitizedCompany,
+      sanitizedCity,
+      sanitizedState,
+      sanitizedPostalcode,
+      sanitizedAddress,
+      sanitizedDescription,
+      sanitizedRequirements,
+      sanitizedPay,
+      sanitizedBenefits,
+      sanitizedVehicle,
+      sanitizedInsurance,
+      sanitizedCerts,
+      sanitizedSchedule,
+      sanitizedCompany
     );
+
+    logSecurityEvent('JOB_POSTED', { 
+      ip: req.ip, 
+      jobId: result.id,
+      company: sanitizedCompany 
+    });
 
     res.json({
       success: true,
       message: 'Job posted successfully',
       data: result
     });
-
-    runXmlExport('job_posted');
   } catch (error) {
     console.error('Error posting job:', error);
     res.status(500).json({
@@ -813,8 +803,6 @@ app.delete('/api/jobs/:id', (req, res) => {
       success: true,
       message: 'Job deleted successfully'
     });
-
-    runXmlExport('job_deleted');
   } catch (error) {
     console.error('Error deleting job:', error);
     res.status(500).json({
@@ -859,13 +847,17 @@ app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
       });
     }
 
+    logSecurityEvent('ADMIN_JOB_VISIBILITY_CHANGED', {
+      ip: req.ip,
+      jobId,
+      action: newHiddenStatus ? 'hide' : 'unhide'
+    });
+
     res.json({
       success: true,
       message: newHiddenStatus ? 'Job hidden successfully' : 'Job unhidden successfully',
       hidden: newHiddenStatus === 1
     });
-
-    runXmlExport('job_visibility_changed');
   } catch (error) {
     console.error('Error toggling job visibility:', error);
     res.status(500).json({
@@ -875,7 +867,7 @@ app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
   }
 });
 
-app.post('/api/subscribe', upload.array('certifications', 10), (req, res) => {
+app.post('/api/subscribe', subscriptionLimiter, upload.array('certifications', 10), (req, res) => {
   console.log('======================================');
   console.log('SUBSCRIBE REQUEST RECEIVED');
   console.log('======================================');
@@ -896,7 +888,8 @@ app.post('/api/subscribe', upload.array('certifications', 10), (req, res) => {
 
   console.log('Extracted fields:', { email, firstName, lastName, city, state, sourceTag });
 
-  if (!email || typeof email !== 'string' || !email.includes('@')) {
+  // Improved email validation
+  if (!email || typeof email !== 'string' || !validateEmail(email)) {
     console.log('ERROR: Invalid email');
     return res.status(400).json({
       success: false,
@@ -904,12 +897,13 @@ app.post('/api/subscribe', upload.array('certifications', 10), (req, res) => {
     });
   }
 
-  const sanitizedEmail = email.trim().toLowerCase();
-  const tag = typeof sourceTag === 'string' ? sourceTag.trim() || null : null;
-  const first = typeof firstName === 'string' && firstName.trim() ? firstName.trim() : null;
-  const last = typeof lastName === 'string' && lastName.trim() ? lastName.trim() : null;
-  const cityValue = typeof city === 'string' && city.trim() ? city.trim() : null;
-  const stateValue = typeof state === 'string' && state.trim() ? state.trim() : null;
+  // Sanitize all inputs
+  const sanitizedEmail = sanitizeText(email, 255).toLowerCase();
+  const tag = typeof sourceTag === 'string' ? sanitizeText(sourceTag, 100) : null;
+  const first = typeof firstName === 'string' && firstName.trim() ? sanitizeText(firstName, 100) : null;
+  const last = typeof lastName === 'string' && lastName.trim() ? sanitizeText(lastName, 100) : null;
+  const cityValue = typeof city === 'string' && city.trim() ? sanitizeText(city, 100) : null;
+  const stateValue = typeof state === 'string' && state.trim() ? sanitizeText(state, 50) : null;
 
   console.log('Sanitized values:', { sanitizedEmail, first, last, cityValue, stateValue, tag });
 
@@ -969,6 +963,13 @@ app.post('/api/subscribe', upload.array('certifications', 10), (req, res) => {
 
     console.log('Transaction committed successfully');
     console.log('======================================');
+    
+    logSecurityEvent('SUBSCRIPTION_CREATED', {
+      ip: req.ip,
+      email: sanitizedEmail,
+      filesCount: req.files ? req.files.length : 0
+    });
+    
     res.json({
       success: true,
       message: 'Subscribed successfully',
@@ -1011,10 +1012,30 @@ app.post('/api/analytics', (req, res) => {
     });
   }
 
+  // Validate session_id format (should be a UUID or similar)
+  if (typeof session_id !== 'string' || session_id.length > 100) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid session_id'
+    });
+  }
+
+  // Limit event_data size to prevent abuse
+  let eventDataString = null;
+  if (event_data) {
+    eventDataString = JSON.stringify(event_data);
+    if (eventDataString.length > 5000) { // 5KB limit
+      return res.status(400).json({
+        success: false,
+        error: 'event_data is too large'
+      });
+    }
+  }
+
   const db = getDb();
 
   try {
-    // Optional: Hash IP for privacy (simple hash)
+    // Hash IP for privacy
     const ipHash = req.ip ? 
       crypto.createHash('sha256').update(req.ip).digest('hex').substring(0, 16) : 
       null;
@@ -1023,8 +1044,8 @@ app.post('/api/analytics', (req, res) => {
       INSERT INTO analytics_events (event_type, event_data, session_id, ip_hash)
       VALUES (?, ?, ?, ?)
     `).run(
-      event_type,
-      event_data ? JSON.stringify(event_data) : null,
+      sanitizeText(event_type, 50),
+      eventDataString,
       session_id,
       ipHash
     );
@@ -1039,10 +1060,11 @@ app.post('/api/analytics', (req, res) => {
   }
 });
 
-// Admin login endpoint
-app.post('/api/admin/login', (req, res) => {
+// Admin login endpoint with brute force protection
+app.post('/api/admin/login', adminLoginLimiter, (req, res) => {
   const { password } = req.body;
   const adminPassword = process.env.ADMIN_PASSWORD;
+  const clientIp = req.ip;
 
   if (!adminPassword) {
     console.error('ADMIN_PASSWORD not configured');
@@ -1052,22 +1074,66 @@ app.post('/api/admin/login', (req, res) => {
     });
   }
 
-  if (password === adminPassword) {
+  // Check if IP is locked out
+  if (isIpLockedOut(clientIp)) {
+    logSecurityEvent('LOGIN_BLOCKED_LOCKED_OUT', { ip: clientIp });
+    return res.status(429).json({
+      success: false,
+      error: 'Too many failed login attempts. Please try again in 15 minutes.'
+    });
+  }
+
+  // Validate password exists and is string
+  if (!password || typeof password !== 'string') {
+    recordFailedLogin(clientIp);
+    logSecurityEvent('LOGIN_FAILED_INVALID_INPUT', { ip: clientIp });
+    return res.status(400).json({
+      success: false,
+      error: 'Password is required'
+    });
+  }
+
+  // Use timing-safe comparison to prevent timing attacks
+  const passwordBuffer = Buffer.from(password);
+  const adminPasswordBuffer = Buffer.from(adminPassword);
+  
+  // Make buffers same length for timing-safe comparison
+  const maxLength = Math.max(passwordBuffer.length, adminPasswordBuffer.length);
+  const paddedPassword = Buffer.alloc(maxLength);
+  const paddedAdminPassword = Buffer.alloc(maxLength);
+  passwordBuffer.copy(paddedPassword);
+  adminPasswordBuffer.copy(paddedAdminPassword);
+
+  if (crypto.timingSafeEqual(paddedPassword, paddedAdminPassword)) {
+    // Clear failed attempts on successful login
+    loginAttempts.delete(clientIp);
+    
     req.session.isAdmin = true;
+    req.session.loginTime = Date.now();
+    req.session.ip = clientIp;
+    
+    logSecurityEvent('ADMIN_LOGIN_SUCCESS', { ip: clientIp });
+    
     res.json({
       success: true,
       message: 'Login successful'
     });
   } else {
+    recordFailedLogin(clientIp);
+    logSecurityEvent('LOGIN_FAILED_WRONG_PASSWORD', { ip: clientIp });
+    
+    // Generic error message to not reveal if password was close
     res.status(401).json({
       success: false,
-      error: 'Invalid password'
+      error: 'Invalid credentials'
     });
   }
 });
 
 // Admin logout endpoint
 app.post('/api/admin/logout', (req, res) => {
+  const wasAdmin = req.session && req.session.isAdmin;
+  
   req.session.destroy((err) => {
     if (err) {
       return res.status(500).json({
@@ -1075,6 +1141,11 @@ app.post('/api/admin/logout', (req, res) => {
         error: 'Failed to logout'
       });
     }
+    
+    if (wasAdmin) {
+      logSecurityEvent('ADMIN_LOGOUT', { ip: req.ip });
+    }
+    
     res.json({
       success: true,
       message: 'Logged out successfully'
@@ -1240,9 +1311,10 @@ app.get('/api/admin/analytics', requireAdmin, (req, res) => {
       LIMIT 30
     `).all();
 
-    // Most clicked jobs
+    // Most clicked jobs (prefer events with job_id when available)
     const mostClickedJobs = db.prepare(`
       SELECT 
+        MAX(json_extract(event_data, '$.job_id')) as job_id,
         json_extract(event_data, '$.title') as job_title,
         json_extract(event_data, '$.company') as company,
         json_extract(event_data, '$.location') as location,
@@ -1329,6 +1401,7 @@ app.get('/api/admin/analytics', requireAdmin, (req, res) => {
           count: fs.count
         })),
         topClicks: mostClickedJobs.map(j => ({
+          jobId: j.job_id,
           title: j.job_title,
           company: j.company,
           location: j.location || 'Location not tracked',
@@ -1343,6 +1416,147 @@ app.get('/api/admin/analytics', requireAdmin, (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch analytics'
+    });
+  }
+});
+
+// Protected: Get individual job analytics
+app.get('/api/admin/analytics/job/:jobId', requireAdmin, (req, res) => {
+  const db = getDb();
+  const { jobId } = req.params;
+  const timeRange = req.query.timeRange || '24h';
+
+  try {
+    // Helper function to get date filter SQL based on time range
+    const getDateFilter = (range) => {
+      switch (range) {
+        case '24h':
+          return "AND created_at >= datetime('now', '-24 hours')";
+        case '7days':
+          return "AND created_at >= datetime('now', '-7 days')";
+        case '30days':
+          return "AND created_at >= datetime('now', '-30 days')";
+        case 'all':
+        default:
+          return '';
+      }
+    };
+
+    const dateFilter = getDateFilter(timeRange);
+
+    // Get job details from both databases
+    let jobDetails = null;
+    try {
+      jobDetails = db.prepare(`
+        SELECT id, title, company, city, state
+        FROM jobs
+        WHERE id = ?
+      `).get(jobId);
+    } catch (e) {
+      // Try user_jobs database
+      const userDb = getUserJobsDb();
+      jobDetails = userDb.prepare(`
+        SELECT id, title, company, city, state
+        FROM jobs
+        WHERE id = ?
+      `).get(jobId);
+    }
+
+    if (!jobDetails) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found'
+      });
+    }
+
+    // Get total views (job_impression events)
+    const totalViews = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM analytics_events
+      WHERE event_type = 'job_impression'
+      AND json_extract(event_data, '$.job_id') = CAST(? AS INTEGER)
+      ${dateFilter}
+    `).get(jobId);
+
+    // Get total clicks (job_click events)
+    const totalClicks = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM analytics_events
+      WHERE event_type = 'job_click'
+      AND json_extract(event_data, '$.job_id') = CAST(? AS INTEGER)
+      ${dateFilter}
+    `).get(jobId);
+
+    // Calculate CTR
+    const views = totalViews.count || 0;
+    const clicks = totalClicks.count || 0;
+    const ctr = views > 0 ? ((clicks / views) * 100).toFixed(2) : 0;
+
+    // Get timeline data (views and clicks by date)
+    const viewsTimeline = db.prepare(`
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as count
+      FROM analytics_events
+      WHERE event_type = 'job_impression'
+      AND json_extract(event_data, '$.job_id') = CAST(? AS INTEGER)
+      ${dateFilter}
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `).all(jobId);
+
+    const clicksTimeline = db.prepare(`
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as count
+      FROM analytics_events
+      WHERE event_type = 'job_click'
+      AND json_extract(event_data, '$.job_id') = CAST(? AS INTEGER)
+      ${dateFilter}
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `).all(jobId);
+
+    // Merge timelines (ensure all dates have both views and clicks data)
+    const dateMap = new Map();
+    
+    viewsTimeline.forEach(item => {
+      dateMap.set(item.date, { date: item.date, views: item.count, clicks: 0 });
+    });
+    
+    clicksTimeline.forEach(item => {
+      if (dateMap.has(item.date)) {
+        dateMap.get(item.date).clicks = item.count;
+      } else {
+        dateMap.set(item.date, { date: item.date, views: 0, clicks: item.count });
+      }
+    });
+
+    const timeline = Array.from(dateMap.values()).sort((a, b) => 
+      new Date(a.date) - new Date(b.date)
+    );
+
+    res.json({
+      success: true,
+      job: {
+        id: jobDetails.id,
+        title: jobDetails.title,
+        company: jobDetails.company,
+        location: `${jobDetails.city}, ${jobDetails.state}`
+      },
+      summary: {
+        totalViews: views,
+        totalClicks: clicks,
+        clickThroughRate: parseFloat(ctr)
+      },
+      timeline: timeline
+    });
+
+  } catch (error) {
+    console.error('Error fetching job analytics:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch job analytics'
     });
   }
 });
@@ -1387,6 +1601,47 @@ app.get('/api/admin/download/:certId', requireAdmin, (req, res) => {
   }
 });
 
+// Protected: View certification file in browser
+app.get('/api/admin/view/:certId', requireAdmin, (req, res) => {
+  const { certId } = req.params;
+  const db = getDb();
+
+  try {
+    const cert = db.prepare(`
+      SELECT file_path, file_name, mime_type
+      FROM subscriber_certifications
+      WHERE id = ?
+    `).get(certId);
+
+    if (!cert) {
+      return res.status(404).json({
+        success: false,
+        error: 'Certification file not found'
+      });
+    }
+
+    const filePath = path.join(__dirname, cert.file_path);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'File not found on server'
+      });
+    }
+
+    // Use 'inline' instead of 'attachment' to display in browser
+    res.setHeader('Content-Disposition', `inline; filename="${cert.file_name}"`);
+    res.setHeader('Content-Type', cert.mime_type);
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Error viewing file:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to view file'
+    });
+  }
+});
+
 // Initialize user jobs database with schema
 function initializeUserJobsDb() {
   const userDb = getUserDb();
@@ -1400,7 +1655,6 @@ function initializeUserJobsDb() {
       company TEXT NOT NULL,
       city TEXT NOT NULL,
       state TEXT NOT NULL,
-      postalcode TEXT,
       address TEXT,
       description TEXT NOT NULL,
       general_requirements TEXT,
@@ -1423,7 +1677,7 @@ function initializeUserJobsDb() {
   } catch (error) {
     // Column already exists, ignore error
   }
-
+  
   // Add certifications_required column if it doesn't exist (migration for existing databases)
   try {
     userDb.exec(`ALTER TABLE jobs ADD COLUMN certifications_required TEXT`);
@@ -1443,29 +1697,14 @@ function initializeUserJobsDb() {
   console.log('User jobs database initialized');
 }
 
-function scheduleXmlExport() {
-  if (!process.env.DB_URL) {
-    return;
-  }
-
-  runXmlExport('startup');
-  xmlExportTimer = setInterval(() => {
-    runXmlExport('interval');
-  }, XML_EXPORT_INTERVAL_MS);
-}
-
 // Initialize databases on startup
 initializeUserJobsDb();
-scheduleXmlExport();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API server running on http://0.0.0.0:${PORT}`);
 });
 
 process.on('SIGINT', () => {
-  if (xmlExportTimer) {
-    clearInterval(xmlExportTimer);
-  }
   closeDb();
   process.exit(0);
 });

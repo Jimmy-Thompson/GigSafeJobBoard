@@ -450,7 +450,6 @@
                 <th>Name</th>
                 <th>Email</th>
                 <th>Location</th>
-                <th>Source</th>
                 <th>Certifications</th>
                 <th>Subscribed</th>
               </tr>
@@ -560,6 +559,18 @@
         </div>
 
         <h2>Popular Job Clicks</h2>
+        
+        <!-- Search box for filtering jobs -->
+        <div style="margin-bottom: 20px;">
+          <input 
+            type="text" 
+            id="jobSearchInput" 
+            placeholder="Search by job title, company, or location..." 
+            style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box;"
+          />
+          <div id="jobSearchCount" style="margin-top: 8px; font-size: 13px; color: #666;"></div>
+        </div>
+
         <div class="table-container">
           <div id="clicksLoading" class="loading">Loading click data...</div>
           <div id="clicksEmpty" class="empty-state" style="display: none">
@@ -610,6 +621,122 @@
         </div>
       </div>
     </div>
+
+    <!-- Job Analytics Modal -->
+    <div id="jobAnalyticsModal" style="display: none;">
+      <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+        <button class="modal-close" id="closeAnalyticsModal">&times;</button>
+        
+        <div style="margin-bottom: 24px;">
+          <h2 id="analyticsJobTitle" style="margin: 0 0 8px 0; font-size: 24px;"></h2>
+          <div id="analyticsJobInfo" style="color: #666; font-size: 14px;"></div>
+        </div>
+
+        <!-- Time Range Selector -->
+        <div style="margin-bottom: 24px; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button class="time-range-btn active" data-range="24h">24 Hours</button>
+            <button class="time-range-btn" data-range="7days">7 Days</button>
+            <button class="time-range-btn" data-range="30days">30 Days</button>
+            <button class="time-range-btn" data-range="all">All Time</button>
+          </div>
+        </div>
+
+        <!-- Summary Metrics -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px;">
+          <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #4F46E5;">
+            <div style="font-size: 13px; color: #666; margin-bottom: 4px;">Total Views</div>
+            <div id="analyticsViews" style="font-size: 32px; font-weight: 700; color: #1f2937;">0</div>
+          </div>
+          <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #10B981;">
+            <div style="font-size: 13px; color: #666; margin-bottom: 4px;">Total Clicks</div>
+            <div id="analyticsClicks" style="font-size: 32px; font-weight: 700; color: #1f2937;">0</div>
+          </div>
+          <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #F59E0B;">
+            <div style="font-size: 13px; color: #666; margin-bottom: 4px;">Click-Through Rate</div>
+            <div id="analyticsCTR" style="font-size: 32px; font-weight: 700; color: #1f2937;">0%</div>
+          </div>
+        </div>
+
+        <!-- Chart -->
+        <div style="background: white; padding: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          <h3 style="margin: 0 0 16px 0; font-size: 16px; color: #555;">Views vs Clicks Over Time</h3>
+          <div id="analyticsChartLoading" style="text-align: center; padding: 40px; color: #666;">
+            Loading chart data...
+          </div>
+          <div id="analyticsChartEmpty" style="display: none; text-align: center; padding: 40px; color: #999;">
+            No data available for the selected time range
+          </div>
+          <canvas id="jobAnalyticsChart" style="display: none; max-height: 400px;"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      #jobAnalyticsModal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 10000;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      
+      #jobAnalyticsModal .modal-content {
+        background: white;
+        border-radius: 12px;
+        padding: 32px;
+        position: relative;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+      
+      #jobAnalyticsModal .modal-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: none;
+        border: none;
+        font-size: 28px;
+        cursor: pointer;
+        color: #666;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: all 0.2s;
+      }
+      
+      #jobAnalyticsModal .modal-close:hover {
+        background: #f3f4f6;
+        color: #000;
+      }
+      
+      .time-range-btn {
+        padding: 10px 20px;
+        border: 2px solid #e5e7eb;
+        background: white;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .time-range-btn:hover {
+        border-color: #4F46E5;
+        background: #f8f9fa;
+      }
+      .time-range-btn.active {
+        border-color: #4F46E5;
+        background: #4F46E5;
+        color: white;
+      }
+    </style>
 
     <div id="jobModal" class="modal-overlay">
       <div class="modal">
@@ -774,6 +901,7 @@
                     (cert) => `
                   <li class="cert-item">
                     <span class="badge badge-primary">${cert.certification_type}</span>
+                    <a href="/api/admin/view/${cert.id}" target="_blank" class="download-btn" style="background: #10b981; margin-right: 4px;">View</a>
                     <a href="/api/admin/download/${cert.id}" class="download-btn">Download</a>
                   </li>
                 `
@@ -794,7 +922,6 @@
               <td>${name}</td>
               <td>${sub.email}</td>
               <td>${location}</td>
-              <td><span class="badge badge-success">${sub.source_tag || "Direct"}</span></td>
               <td>${certsHtml}</td>
               <td>${date}</td>
             `;
@@ -1059,22 +1186,95 @@
 
           clicksLoading.style.display = "none";
 
-          if (stats.topClicks && stats.topClicks.length > 0) {
+          // Store all clicks data for filtering
+          window.allJobClicks = stats.topClicks || [];
+
+          // Function to render job clicks table
+          window.renderJobClicksTable = function(clicksToShow) {
+            console.log('🔵 renderJobClicksTable called with', clicksToShow.length, 'clicks');
             clicksBody.innerHTML = "";
-            stats.topClicks.forEach((click) => {
-              const row = document.createElement("tr");
-              row.innerHTML = `
-                <td><strong>${click.title}</strong></td>
-                <td>${click.company}</td>
-                <td>${click.location}</td>
-                <td>${click.count}</td>
-              `;
-              clicksBody.appendChild(row);
-            });
-            clicksTable.style.display = "table";
+            
+            if (clicksToShow.length > 0) {
+              clicksToShow.forEach((click, index) => {
+                const row = document.createElement("tr");
+                const hasJobId = click.jobId !== null && click.jobId !== undefined;
+                
+                console.log(`Row ${index}:`, {
+                  title: click.title,
+                  jobId: click.jobId,
+                  hasJobId: hasJobId
+                });
+                
+                if (hasJobId) {
+                  row.style.cursor = "pointer";
+                  row.style.transition = "background-color 0.2s";
+                  row.onmouseenter = () => row.style.backgroundColor = "#f5f5f5";
+                  row.onmouseleave = () => row.style.backgroundColor = "";
+                  row.onclick = () => {
+                    console.log('🟢 Row clicked!', {
+                      jobId: click.jobId,
+                      title: click.title,
+                      company: click.company,
+                      location: click.location
+                    });
+                    openJobAnalyticsModal(click.jobId, click.title, click.company, click.location);
+                  };
+                  row.title = "Click to view detailed analytics";
+                } else {
+                  row.style.opacity = "0.6";
+                  row.title = "Legacy data - detailed analytics not available";
+                  console.log(`Row ${index} has NO jobId - not clickable`);
+                }
+                
+                row.innerHTML = `
+                  <td><strong>${click.title}</strong></td>
+                  <td>${click.company}</td>
+                  <td>${click.location}</td>
+                  <td>${click.count}${hasJobId ? '' : ' *'}</td>
+                `;
+                clicksBody.appendChild(row);
+              });
+              clicksTable.style.display = "table";
+              clicksEmpty.style.display = "none";
+            } else {
+              clicksTable.style.display = "none";
+              clicksEmpty.style.display = "block";
+            }
+          };
+
+          // Initial render
+          if (window.allJobClicks.length > 0) {
+            window.renderJobClicksTable(window.allJobClicks);
           } else {
             clicksEmpty.style.display = "block";
           }
+
+          // Setup search filtering
+          const jobSearchInput = document.getElementById("jobSearchInput");
+          const jobSearchCount = document.getElementById("jobSearchCount");
+          
+          if (jobSearchInput) {
+            jobSearchInput.addEventListener("input", (e) => {
+              const searchTerm = e.target.value.toLowerCase().trim();
+              
+              if (!searchTerm) {
+                // Show all jobs
+                window.renderJobClicksTable(window.allJobClicks);
+                jobSearchCount.textContent = "";
+              } else {
+                // Filter jobs by title, company, or location
+                const filtered = window.allJobClicks.filter(click => {
+                  return click.title.toLowerCase().includes(searchTerm) ||
+                         click.company.toLowerCase().includes(searchTerm) ||
+                         click.location.toLowerCase().includes(searchTerm);
+                });
+                
+                window.renderJobClicksTable(filtered);
+                jobSearchCount.textContent = `Showing ${filtered.length} of ${window.allJobClicks.length} jobs`;
+              }
+            });
+          }
+
 
           // Render charts
           renderCharts(stats.clicksOverTime, stats.top5JobsOverTime);
@@ -1346,6 +1546,237 @@
         document.body.style.overflow = "";
         console.log("Modal closed");
       }
+
+      // ========================================
+      // JOB ANALYTICS MODAL FUNCTIONALITY
+      // ========================================
+      
+      let currentJobData = null;
+      let currentTimeRange = '24h';
+      let analyticsChartInstance = null;
+
+      // Open job analytics modal
+      async function openJobAnalyticsModal(jobId, jobTitle, jobCompany, jobLocation) {
+        console.log('🟡 openJobAnalyticsModal called with:', {
+          jobId,
+          jobTitle,
+          jobCompany,
+          jobLocation
+        });
+        
+        const modal = document.getElementById('jobAnalyticsModal');
+        console.log('Modal element:', modal);
+        
+        if (!jobId) {
+          console.error('❌ Job ID missing!');
+          alert('Unable to load analytics - job ID missing');
+          return;
+        }
+        
+        // Set modal title and info
+        document.getElementById('analyticsJobTitle').textContent = jobTitle;
+        document.getElementById('analyticsJobInfo').textContent = `${jobCompany} • ${jobLocation}`;
+        
+        console.log('🟡 Showing modal...');
+        // Show modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        
+        // Reset time range to default
+        currentTimeRange = '24h';
+        document.querySelectorAll('.time-range-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.range === '24h');
+        });
+        
+        // Store current job data
+        currentJobData = { jobId, title: jobTitle, company: jobCompany, location: jobLocation };
+        
+        console.log('🟡 Fetching analytics...');
+        // Fetch and display analytics
+        await fetchJobAnalytics(jobId, currentTimeRange);
+      }
+
+      // Close analytics modal
+      function closeAnalyticsModal() {
+        const modal = document.getElementById('jobAnalyticsModal');
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+        
+        // Destroy chart
+        if (analyticsChartInstance) {
+          analyticsChartInstance.destroy();
+          analyticsChartInstance = null;
+        }
+      }
+
+      // Fetch job analytics from API
+      async function fetchJobAnalytics(jobId, timeRange) {
+        console.log('🔵 fetchJobAnalytics called:', { jobId, timeRange });
+        
+        const chartLoading = document.getElementById('analyticsChartLoading');
+        const chartEmpty = document.getElementById('analyticsChartEmpty');
+        const canvas = document.getElementById('jobAnalyticsChart');
+        
+        chartLoading.style.display = 'block';
+        chartEmpty.style.display = 'none';
+        canvas.style.display = 'none';
+        
+        try {
+          const url = `/api/admin/analytics/job/${jobId}?timeRange=${timeRange}`;
+          console.log('🔵 Fetching:', url);
+          
+          const analyticsResponse = await fetch(url);
+          console.log('🔵 Response status:', analyticsResponse.status);
+          
+          const analyticsData = await analyticsResponse.json();
+          console.log('🔵 Response data:', analyticsData);
+          
+          if (analyticsData.success) {
+            displayAnalyticsData(analyticsData);
+          } else {
+            throw new Error(analyticsData.error || 'Failed to load analytics');
+          }
+        } catch (error) {
+          console.error('❌ Error fetching job analytics:', error);
+          chartLoading.style.display = 'none';
+          chartEmpty.textContent = `Error: ${error.message}`;
+          chartEmpty.style.display = 'block';
+        }
+      }
+
+      // Display analytics data in modal
+      function displayAnalyticsData(data) {
+        // Update summary metrics
+        document.getElementById('analyticsViews').textContent = data.summary.totalViews.toLocaleString();
+        document.getElementById('analyticsClicks').textContent = data.summary.totalClicks.toLocaleString();
+        document.getElementById('analyticsCTR').textContent = data.summary.clickThroughRate + '%';
+        
+        // Hide loading, show chart
+        document.getElementById('analyticsChartLoading').style.display = 'none';
+        
+        if (data.timeline && data.timeline.length > 0) {
+          document.getElementById('analyticsChartEmpty').style.display = 'none';
+          document.getElementById('jobAnalyticsChart').style.display = 'block';
+          renderAnalyticsChart(data.timeline);
+        } else {
+          document.getElementById('analyticsChartEmpty').style.display = 'block';
+          document.getElementById('jobAnalyticsChart').style.display = 'none';
+        }
+      }
+
+      // Render dual-axis chart (views vs clicks)
+      function renderAnalyticsChart(timeline) {
+        const canvas = document.getElementById('jobAnalyticsChart');
+        const ctx = canvas.getContext('2d');
+        
+        // Destroy existing chart
+        if (analyticsChartInstance) {
+          analyticsChartInstance.destroy();
+        }
+        
+        // Prepare data
+        const dates = timeline.map(d => d.date);
+        const views = timeline.map(d => d.views);
+        const clicks = timeline.map(d => d.clicks);
+        
+        // Create chart
+        analyticsChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: dates,
+            datasets: [
+              {
+                label: 'Views',
+                data: views,
+                borderColor: '#4F46E5',
+                backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                yAxisID: 'y',
+                tension: 0.3
+              },
+              {
+                label: 'Clicks',
+                data: clicks,
+                borderColor: '#10B981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                yAxisID: 'y1',
+                tension: 0.3
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: 'top'
+              },
+              tooltip: {
+                enabled: true
+              }
+            },
+            scales: {
+              y: {
+                type: 'linear',
+                position: 'left',
+                title: {
+                  display: true,
+                  text: 'Views'
+                },
+                beginAtZero: true
+              },
+              y1: {
+                type: 'linear',
+                position: 'right',
+                title: {
+                  display: true,
+                  text: 'Clicks'
+                },
+                beginAtZero: true,
+                grid: {
+                  drawOnChartArea: false
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Setup modal event listeners
+      const closeAnalyticsBtn = document.getElementById('closeAnalyticsModal');
+      if (closeAnalyticsBtn) {
+        closeAnalyticsBtn.addEventListener('click', closeAnalyticsModal);
+      }
+
+      const analyticsModal = document.getElementById('jobAnalyticsModal');
+      if (analyticsModal) {
+        analyticsModal.addEventListener('click', (e) => {
+          if (e.target.id === 'jobAnalyticsModal') {
+            closeAnalyticsModal();
+          }
+        });
+      }
+
+      // Setup time range buttons
+      document.querySelectorAll('.time-range-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const range = this.dataset.range;
+          currentTimeRange = range;
+          
+          // Update active button
+          document.querySelectorAll('.time-range-btn').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          
+          // Refetch analytics with new time range
+          if (currentJobData && currentJobData.jobId) {
+            await fetchJobAnalytics(currentJobData.jobId, range);
+          }
+        });
+      });
 
       console.log("Setting up modal close handlers...");
       const closeBtn = document.getElementById("closeModal");

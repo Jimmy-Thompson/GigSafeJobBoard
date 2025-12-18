@@ -42,6 +42,14 @@ indexes.forEach(index => {
   }
 });
 
+// Add postalcode column if it doesn't exist
+try {
+  userDb.exec("ALTER TABLE jobs ADD COLUMN postalcode TEXT");
+  console.log('Added postalcode column');
+} catch (error) {
+  // Column already exists, ignore error
+}
+
 // Verify table was created
 const tableInfo = userDb.prepare("PRAGMA table_info(jobs)").all();
 console.log('\nUser jobs table columns:');

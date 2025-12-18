@@ -959,6 +959,10 @@
         font-weight: 700;
         font-size: 0.95rem;
         white-space: nowrap;
+        max-width: 300px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex-shrink: 0;
       }
 
       .job-item-description {
@@ -2152,7 +2156,6 @@
           </div>
           <div class="job-item-description">${escapeHtml(description)}</div>
           <div class="job-item-tags">
-            ${job.source_company ? `<span class="job-tag">${escapeHtml(job.source_company)}</span>` : ''}
             ${job.vehicle_requirements ? `<span class="job-tag">${escapeHtml(job.vehicle_requirements)}</span>` : ''}
           </div>
         `;

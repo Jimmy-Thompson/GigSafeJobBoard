@@ -52,6 +52,20 @@ Start just the frontend:
 npm run dev
 ```
 
+### Faster LLM Extraction
+- Set multiple API keys via `ANTHROPIC_API_KEYS=key1,key2,...` to shard traffic automatically (falls back to `ANTHROPIC_API_KEY`).
+- `npm run scrape <company> --llm-max-concurrency=3 --llm-rpm=60` tunes per-key throughput; omit to use defaults (2 concurrent / 40 RPM).
+- Add `--llm-force` to reprocess existing `job_*.txt` files, or `--llm-serial` to fall back to the legacy single-threaded flow for debugging.
+- `npx tsx scripts/batch_llm.ts <output_dir> <company>` now leverages the same scheduler for ad-hoc reruns.
+- Job texts are hashed automatically—unchanged postings reuse cached JSON instead of calling the LLM again (disable with `--llm-force` when needed).
+
+### Run Every Pipeline With One Command
+- `npm run scrape:all` (or `npx tsx scripts/run_all.ts --all`) walks every company sequentially, reusing the faster LLM backend under the hood.
+- Target a subset with `npx tsx scripts/run_all.ts --companies=amazon-dsp,dropoff` or skip noisy sources via `--exclude=airspace,gopuff`.
+- Use `--max-parallel=2` to let a couple of companies run at once, and pass any LLM tuning flags (`--llm-max-concurrency`, `--llm-rpm`, `--llm-force`, etc.)—they cascade down to each per-company run.
+- Append `--dry-run` to see the planned order without launching Playwright, `--list` to print the manifest with pipeline types, and `--resume` to pick up the last interrupted run without reprocessing finished companies.
+ - The orchestrator prefers the unified prompt by default. To force unified prompt on a single company run, add `--llm-unified-prompt`.
+
 ## Tech Stack
 
 - **Frontend:** Vanilla HTML/CSS/JavaScript with modern design

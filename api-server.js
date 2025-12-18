@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import BetterSqlite3Store from 'better-sqlite3-session-store';
+import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -278,6 +279,7 @@ if (adminPassword.length < 8) {
 }
 
 const SQLiteStore = BetterSqlite3Store(session);
+const sessionDb = new Database(path.join(__dirname, 'outputs', 'sessions.db'));
 
 // Determine if we should use secure cookies (HTTPS only)
 // Secure cookies on Replit deployment OR when NODE_ENV=production
@@ -293,9 +295,11 @@ if (useSecureCookies) {
 
 app.use(session({
   store: new SQLiteStore({
-    db: 'sessions.db',
-    dir: path.join(__dirname, 'outputs'),
-    table: 'sessions'
+    client: sessionDb,
+    expired: {
+      clear: true,
+      intervalMs: 900000
+    }
   }),
   secret: sessionSecret,
   resave: false,

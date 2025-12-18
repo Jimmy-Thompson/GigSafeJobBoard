@@ -629,7 +629,7 @@ app.get('/jobs/:id', async (req, res) => {
   }
 });
 
-app.get('/api/jobs', (req, res) => {
+app.get('/api/jobs', async (req, res) => {
   const page = Number.parseInt(req.query.page) || 1;
   const limit = Number.parseInt(req.query.limit) || 20;
   const offset = (page - 1) * limit;
@@ -641,173 +641,179 @@ app.get('/api/jobs', (req, res) => {
   const masterDb = getDb();
 
   try {
-    // Attach user database to enable UNION ALL query across both databases
-    const userDbPath = path.join(__dirname, 'outputs', 'user_jobs.db');
-    masterDb.exec(`ATTACH DATABASE '${userDbPath}' AS user_db`);
-
-    // Count total jobs from both databases using UNION ALL
-    // Filter out hidden jobs from user_db.jobs
-    const userWhereClause = whereClause === 'WHERE 1=1' 
-      ? 'WHERE hidden = 0' 
-      : whereClause + ' AND hidden = 0';
+    // Fetch user-submitted jobs from PostgreSQL if DATABASE_URL is set
+    let userJobs = [];
+    let userJobsCount = 0;
     
-    const countQuery = `
-      SELECT SUM(cnt) as count FROM (
-        SELECT COUNT(*) as cnt FROM jobs ${whereClause}
-        UNION ALL
-        SELECT COUNT(*) as cnt FROM user_db.jobs ${userWhereClause}
-      )
+    if (process.env.DATABASE_URL) {
+      const pgClient = new Client({ connectionString: process.env.DATABASE_URL });
+      await pgClient.connect();
+      
+      try {
+        // Build PostgreSQL WHERE clause for user jobs
+        let pgWhereConditions = ['hidden = false'];
+        let pgParams = [];
+        let paramIndex = 1;
+        
+        // 24-hour freshness filter for user jobs
+        pgWhereConditions.push(`(submitted_at IS NULL OR submitted_at > NOW() - INTERVAL '24 hours')`);
+        
+        if (filters.keyword) {
+          pgWhereConditions.push(`(
+            title ILIKE $${paramIndex} OR 
+            description ILIKE $${paramIndex} OR 
+            company ILIKE $${paramIndex} OR
+            benefits ILIKE $${paramIndex} OR
+            schedule_details ILIKE $${paramIndex} OR
+            general_requirements ILIKE $${paramIndex}
+          )`);
+          pgParams.push(`%${filters.keyword}%`);
+          paramIndex++;
+        }
+        if (filters.city) {
+          pgWhereConditions.push(`city = $${paramIndex}`);
+          pgParams.push(filters.city);
+          paramIndex++;
+        }
+        if (filters.state) {
+          pgWhereConditions.push(`state = $${paramIndex}`);
+          pgParams.push(filters.state);
+          paramIndex++;
+        }
+        if (filters.vehicle) {
+          if (filters.vehicle === 'Box Truck') {
+            pgWhereConditions.push(`(vehicle_requirements ILIKE $${paramIndex} OR vehicle_requirements ILIKE $${paramIndex + 1})`);
+            pgParams.push('%Box Truck%', '%Straight Truck%');
+            paramIndex += 2;
+          } else if (filters.vehicle === 'Cargo/Sprinter Van') {
+            pgWhereConditions.push(`(vehicle_requirements ILIKE $${paramIndex} OR vehicle_requirements ILIKE $${paramIndex + 1})`);
+            pgParams.push('%Cargo Van%', '%Sprinter Van%');
+            paramIndex += 2;
+          } else {
+            pgWhereConditions.push(`vehicle_requirements ILIKE $${paramIndex}`);
+            pgParams.push(`%${filters.vehicle}%`);
+            paramIndex++;
+          }
+        }
+        if (filters.certifications) {
+          const certList = filters.certifications.split(',').map(c => c.trim()).filter(Boolean);
+          if (certList.length > 0) {
+            const certConditions = certList.map(() => {
+              const condition = `certifications_required ILIKE $${paramIndex}`;
+              paramIndex++;
+              return condition;
+            }).join(' OR ');
+            pgWhereConditions.push(`(${certConditions})`);
+            certList.forEach(cert => pgParams.push(`%${cert}%`));
+          }
+        }
+        
+        const pgWhereClause = pgWhereConditions.length > 0 
+          ? 'WHERE ' + pgWhereConditions.join(' AND ')
+          : '';
+        
+        // Count user jobs
+        const countResult = await pgClient.query(
+          `SELECT COUNT(*) as count FROM user_submitted_jobs ${pgWhereClause}`,
+          pgParams
+        );
+        userJobsCount = parseInt(countResult.rows[0].count) || 0;
+        
+        // Fetch user jobs
+        const userJobsResult = await pgClient.query(
+          `SELECT 
+            id, job_url, title, company, city, state, address, description,
+            general_requirements, pay, benefits, vehicle_requirements,
+            insurance_requirement, certifications_required, schedule_details,
+            source_company, submitted_at
+          FROM user_submitted_jobs
+          ${pgWhereClause}
+          ORDER BY submitted_at DESC`,
+          pgParams
+        );
+        userJobs = userJobsResult.rows.map(job => ({
+          ...job,
+          submitted_at: job.submitted_at ? new Date(job.submitted_at).toISOString().replace('T', ' ').slice(0, 19) : null
+        }));
+      } finally {
+        await pgClient.end();
+      }
+    }
+
+    // Count scraped jobs from SQLite
+    const countQuery = `SELECT COUNT(*) as count FROM jobs ${whereClause}`;
+    const { count: scrapedJobsCount } = masterDb.prepare(countQuery).get(...params);
+    
+    const totalJobs = userJobsCount + scrapedJobsCount;
+
+    // Fetch scraped jobs from SQLite
+    const scrapedQuery = `
+      SELECT
+        id, job_url, title, company, city, state, address, description,
+        general_requirements, pay, benefits, vehicle_requirements,
+        insurance_requirement, certifications_required, schedule_details,
+        source_company, submitted_at
+      FROM jobs
+      ${whereClause}
+      ORDER BY id DESC
     `;
-    const { count: totalJobs } = masterDb.prepare(countQuery).get(...params, ...params);
+    const scrapedJobs = masterDb.prepare(scrapedQuery).all(...params);
 
-    // UNION ALL query to get jobs from both databases with pagination
-    // Wrap UNION in subquery to properly apply ORDER BY and LIMIT
-    // Filter out hidden jobs from user_db.jobs
-    const unionQuery = filters.keyword
-      ? `
-        SELECT * FROM (
-          SELECT
-            id,
-            job_url,
-            title,
-            company,
-            city,
-            state,
-            address,
-            description,
-            general_requirements,
-            pay,
-            benefits,
-            vehicle_requirements,
-            insurance_requirement,
-            certifications_required,
-            schedule_details,
-            source_company,
-            submitted_at
-          FROM user_db.jobs
-          ${userWhereClause}
-          UNION ALL
-          SELECT
-            id,
-            job_url,
-            title,
-            company,
-            city,
-            state,
-            address,
-            description,
-            general_requirements,
-            pay,
-            benefits,
-            vehicle_requirements,
-            insurance_requirement,
-            certifications_required,
-            schedule_details,
-            source_company,
-            submitted_at
-          FROM jobs
-          ${whereClause}
-        ) AS combined
-        ORDER BY
-          CASE WHEN submitted_at IS NOT NULL THEN 0 ELSE 1 END,
-          CASE
-            WHEN title LIKE ? COLLATE NOCASE THEN 1
-            WHEN description LIKE ? COLLATE NOCASE THEN 2
-            WHEN schedule_details LIKE ? COLLATE NOCASE THEN 3
-            WHEN general_requirements LIKE ? COLLATE NOCASE THEN 4
-            ELSE 5
-          END,
-          submitted_at DESC,
-          id DESC
-        LIMIT ? OFFSET ?
-      `
-      : `
-        SELECT * FROM (
-          SELECT
-            id,
-            job_url,
-            title,
-            company,
-            city,
-            state,
-            address,
-            description,
-            general_requirements,
-            pay,
-            benefits,
-            vehicle_requirements,
-            insurance_requirement,
-            certifications_required,
-            schedule_details,
-            source_company,
-            submitted_at
-          FROM user_db.jobs
-          ${userWhereClause}
-          UNION ALL
-          SELECT
-            id,
-            job_url,
-            title,
-            company,
-            city,
-            state,
-            address,
-            description,
-            general_requirements,
-            pay,
-            benefits,
-            vehicle_requirements,
-            insurance_requirement,
-            certifications_required,
-            schedule_details,
-            source_company,
-            submitted_at
-          FROM jobs
-          ${whereClause}
-        ) AS combined
-        ORDER BY
-          CASE WHEN submitted_at IS NOT NULL THEN 0 ELSE 1 END,
-          submitted_at DESC,
-          id DESC
-        LIMIT ? OFFSET ?
-      `;
+    // Merge and sort: user jobs first (have submitted_at), then scraped jobs
+    let allJobs = [...userJobs, ...scrapedJobs];
+    
+    // Sort by relevance if keyword search, otherwise user jobs first
+    if (filters.keyword) {
+      const kw = filters.keyword.toLowerCase();
+      allJobs.sort((a, b) => {
+        // User jobs (with submitted_at) come first
+        const aIsUser = a.submitted_at !== null;
+        const bIsUser = b.submitted_at !== null;
+        if (aIsUser && !bIsUser) return -1;
+        if (!aIsUser && bIsUser) return 1;
+        
+        // Then sort by keyword relevance
+        const aTitle = (a.title || '').toLowerCase().includes(kw) ? 1 : 0;
+        const bTitle = (b.title || '').toLowerCase().includes(kw) ? 1 : 0;
+        if (aTitle !== bTitle) return bTitle - aTitle;
+        
+        const aDesc = (a.description || '').toLowerCase().includes(kw) ? 1 : 0;
+        const bDesc = (b.description || '').toLowerCase().includes(kw) ? 1 : 0;
+        return bDesc - aDesc;
+      });
+    } else {
+      allJobs.sort((a, b) => {
+        // User jobs first
+        const aIsUser = a.submitted_at !== null;
+        const bIsUser = b.submitted_at !== null;
+        if (aIsUser && !bIsUser) return -1;
+        if (!aIsUser && bIsUser) return 1;
+        
+        // Then by submitted_at or id
+        if (aIsUser && bIsUser) {
+          return new Date(b.submitted_at) - new Date(a.submitted_at);
+        }
+        return 0;
+      });
+    }
 
-    // Build params array for the union query
-    const queryParams = filters.keyword
-      ? [
-          ...params, // WHERE clause for user_db.jobs
-          ...params, // WHERE clause for main jobs
-          `%${filters.keyword}%`, `%${filters.keyword}%`, `%${filters.keyword}%`, `%${filters.keyword}%`, // ORDER BY relevance scoring
-          limit,
-          offset
-        ]
-      : [...params, ...params, limit, offset];
-
-    const jobs = masterDb.prepare(unionQuery).all(...queryParams);
-
-    // Detach user database
-    masterDb.exec('DETACH DATABASE user_db');
+    // Apply pagination
+    const paginatedJobs = allJobs.slice(offset, offset + limit);
 
     res.json({
       success: true,
-      data: jobs,
+      data: paginatedJobs,
       pagination: {
         page,
         limit,
         totalJobs,
         totalPages: Math.ceil(totalJobs / limit),
-        hasMore: offset + jobs.length < totalJobs
+        hasMore: offset + paginatedJobs.length < totalJobs
       },
       filters
     });
   } catch (error) {
     console.error('Error fetching jobs:', error);
-    // Ensure database is detached even on error
-    try {
-      masterDb.exec('DETACH DATABASE user_db');
-    } catch (detachError) {
-      // Ignore detach errors
-    }
     res.status(500).json({
       success: false,
       error: 'Failed to fetch jobs'

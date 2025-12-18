@@ -2723,7 +2723,7 @@
         const location =
           [job.city, job.state].filter(Boolean).join(", ") ||
           "Location not specified";
-        const description = job.description || "No description available";
+        const description = stripHtml(job.description) || "No description available";
 
         let certificationBadges = '';
         if (job.certifications_required) {
@@ -2765,6 +2765,13 @@
         const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      // Strip HTML tags to get plain text (for previews)
+      function stripHtml(html) {
+        const div = document.createElement("div");
+        div.innerHTML = html || '';
+        return div.textContent || div.innerText || '';
       }
 
       function setupIntersectionObserver() {

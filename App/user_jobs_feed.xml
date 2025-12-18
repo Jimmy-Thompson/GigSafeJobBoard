@@ -2,4 +2,20 @@
 <source>
   <publisher>GigSafe</publisher>
   <publisherurl>https://www.gigsafe.com/</publisherurl>
+  <job>
+    <title><![CDATA[PostgreSQL Test Driver Job]]></title>
+    <date><![CDATA[2025-12-18 21:36:24]]></date>
+    <referencenumber><![CDATA[7]]></referencenumber>
+    <url><![CDATA[https://gigsafe-jobboard.replit.app/jobs/7]]></url>
+    <company><![CDATA[Test Company]]></company>
+    <address><![CDATA[]]></address>
+    <city><![CDATA[Los Angeles]]></city>
+    <state><![CDATA[CA]]></state>
+    <country><![CDATA[US]]></country>
+    <postalcode><![CDATA[90001]]></postalcode>
+    <description><![CDATA[Testing that jobs now go to PostgreSQL]]></description>
+    <jobtype><![CDATA[Pt. Time/Contract]]></jobtype>
+    <category><![CDATA[Logistics]]></category>
+    <notification><![CDATA[jimmy@gigsafe.com]]></notification>
+  </job>
 </source>

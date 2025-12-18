@@ -803,7 +803,7 @@ app.get('/api/jobs', (req, res) => {
   }
 });
 
-app.post('/api/jobs', jobPostingLimiter, (req, res) => {
+app.post('/api/jobs', jobPostingLimiter, async (req, res) => {
   const {
     job_url,
     title,
@@ -862,11 +862,13 @@ app.post('/api/jobs', jobPostingLimiter, (req, res) => {
   const sanitizedCerts = certifications_required ? sanitizeText(certifications_required, 500) : null;
   const sanitizedSchedule = schedule_details ? sanitizeHTML(schedule_details, 2000) : null;
 
-  const userDb = getUserDb();
-
+  // Insert into PostgreSQL user_submitted_jobs table
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  
   try {
-    const result = userDb.prepare(`
-      INSERT INTO jobs (
+    await client.connect();
+    const result = await client.query(`
+      INSERT INTO user_submitted_jobs (
         job_url,
         title,
         company,
@@ -883,10 +885,11 @@ app.post('/api/jobs', jobPostingLimiter, (req, res) => {
         certifications_required,
         schedule_details,
         source_company,
-        submitted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        submitted_at,
+        hidden
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), false)
       RETURNING *
-    `).get(
+    `, [
       validatedUrl,
       sanitizedTitle,
       sanitizedCompany,
@@ -903,11 +906,13 @@ app.post('/api/jobs', jobPostingLimiter, (req, res) => {
       sanitizedCerts,
       sanitizedSchedule,
       sanitizedCompany
-    );
+    ]);
+
+    const job = result.rows[0];
 
     logSecurityEvent('JOB_POSTED', { 
       ip: req.ip, 
-      jobId: result.id,
+      jobId: job.id,
       company: sanitizedCompany 
     });
 
@@ -916,7 +921,7 @@ app.post('/api/jobs', jobPostingLimiter, (req, res) => {
     res.json({
       success: true,
       message: 'Job posted successfully',
-      data: result
+      data: job
     });
   } catch (error) {
     console.error('Error posting job:', error);
@@ -924,10 +929,12 @@ app.post('/api/jobs', jobPostingLimiter, (req, res) => {
       success: false,
       error: 'Failed to post job'
     });
+  } finally {
+    await client.end();
   }
 });
 
-app.delete('/api/jobs/:id', (req, res) => {
+app.delete('/api/jobs/:id', async (req, res) => {
   const jobId = Number.parseInt(req.params.id);
 
   if (!jobId || isNaN(jobId)) {
@@ -937,19 +944,20 @@ app.delete('/api/jobs/:id', (req, res) => {
     });
   }
 
-  const masterDb = getDb();
-  const userDb = getUserDb();
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
 
   try {
-    // Try deleting from user database first
-    let result = userDb.prepare('DELETE FROM jobs WHERE id = ?').run(jobId);
+    await client.connect();
+    
+    // Try deleting from user_submitted_jobs first
+    let result = await client.query('DELETE FROM user_submitted_jobs WHERE id = $1', [jobId]);
 
-    // If not found in user DB, try master DB
-    if (result.changes === 0) {
-      result = masterDb.prepare('DELETE FROM jobs WHERE id = ?').run(jobId);
+    // If not found in user_submitted_jobs, try jobs table
+    if (result.rowCount === 0) {
+      result = await client.query('DELETE FROM jobs WHERE id = $1', [jobId]);
     }
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
         error: 'Job not found'
@@ -968,11 +976,13 @@ app.delete('/api/jobs/:id', (req, res) => {
       success: false,
       error: 'Failed to delete job'
     });
+  } finally {
+    await client.end();
   }
 });
 
 // Protected: Toggle hidden status for user-submitted job
-app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
+app.patch('/api/admin/jobs/:id/hide', requireAdmin, async (req, res) => {
   const jobId = Number.parseInt(req.params.id);
 
   if (!jobId || isNaN(jobId)) {
@@ -982,24 +992,28 @@ app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
     });
   }
 
-  const userDb = getUserDb();
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
 
   try {
+    await client.connect();
+    
     // Get current job to check if it exists and get current hidden status
-    const job = userDb.prepare('SELECT id, hidden FROM jobs WHERE id = ?').get(jobId);
+    const jobResult = await client.query('SELECT id, hidden FROM user_submitted_jobs WHERE id = $1', [jobId]);
 
-    if (!job) {
+    if (jobResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'User-submitted job not found'
       });
     }
 
+    const job = jobResult.rows[0];
+    
     // Toggle hidden status
-    const newHiddenStatus = job.hidden ? 0 : 1;
-    const result = userDb.prepare('UPDATE jobs SET hidden = ? WHERE id = ?').run(newHiddenStatus, jobId);
+    const newHiddenStatus = !job.hidden;
+    const result = await client.query('UPDATE user_submitted_jobs SET hidden = $1 WHERE id = $2', [newHiddenStatus, jobId]);
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(500).json({
         success: false,
         error: 'Failed to update job visibility'
@@ -1017,7 +1031,7 @@ app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
     res.json({
       success: true,
       message: newHiddenStatus ? 'Job hidden successfully' : 'Job unhidden successfully',
-      hidden: newHiddenStatus === 1
+      hidden: newHiddenStatus
     });
   } catch (error) {
     console.error('Error toggling job visibility:', error);
@@ -1025,6 +1039,8 @@ app.patch('/api/admin/jobs/:id/hide', requireAdmin, (req, res) => {
       success: false,
       error: 'Failed to toggle job visibility'
     });
+  } finally {
+    await client.end();
   }
 });
 

@@ -449,6 +449,16 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'App', 'index.html'));
 });
 
+app.get('/user_jobs_feed.xml', (req, res) => {
+  const xmlPath = path.join(__dirname, 'App', 'user_jobs_feed.xml');
+  if (fs.existsSync(xmlPath)) {
+    res.setHeader('Content-Type', 'application/xml');
+    res.sendFile(xmlPath);
+  } else {
+    res.status(404).send('XML feed not yet generated');
+  }
+});
+
 app.use(express.static('App', {
   index: false,
   dotfiles: 'deny',

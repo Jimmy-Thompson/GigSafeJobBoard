@@ -230,7 +230,8 @@ app.use(helmet({
       styleSrc: [
         "'self'", 
         "'unsafe-inline'",
-        'https://fonts.googleapis.com'
+        'https://fonts.googleapis.com',
+        'https://cdn.jsdelivr.net'
       ],
       scriptSrc: [
         "'self'", 
@@ -493,7 +494,7 @@ function sanitizeHTML(html, maxLength = 50000) {
   if (!html || typeof html !== 'string') return html;
   const trimmed = html.trim().substring(0, maxLength);
   return DOMPurify.sanitize(trimmed, {
-    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li'],
+    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'u', 'p', 'br', 'ul', 'ol', 'li'],
     ALLOWED_ATTR: []
   });
 }

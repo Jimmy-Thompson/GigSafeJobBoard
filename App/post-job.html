@@ -11,6 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet" />
     <style>
       :root {
         --purple: #5B3A9D;
@@ -535,6 +536,37 @@
           padding: 24px;
         }
       }
+
+      #description-editor {
+        min-height: 200px;
+        background: #fafdff;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+      }
+
+      #description-editor .ql-editor {
+        min-height: 180px;
+        font-family: inherit;
+        font-size: 1rem;
+        color: var(--text-primary);
+      }
+
+      #description-editor .ql-editor.ql-blank::before {
+        font-style: normal;
+        color: var(--text-secondary);
+      }
+
+      .ql-toolbar.ql-snow {
+        border: 1px solid var(--border);
+        border-bottom: none;
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
+        background: var(--surface-muted);
+      }
+
+      .ql-container.ql-snow {
+        border: 1px solid var(--border);
+        border-radius: 0 0 var(--radius-md) var(--radius-md);
+      }
     </style>
   </head>
   <body>
@@ -714,14 +746,10 @@
               <h2 class="form-section-title">Description</h2>
               
               <div class="form-group">
-                <label class="form-label required" for="description">Description</label>
-                <textarea
-                  id="description"
-                  name="description"
-                  class="form-textarea"
-                  placeholder="Describe the job, responsibilities, and what makes it great..."
-                  required
-                ></textarea>
+                <label class="form-label required">Description</label>
+                <div id="description-editor"></div>
+                <input type="hidden" id="description" name="description" />
+                <div class="form-hint">Use the toolbar to format your text with bold, italics, bullet points, etc.</div>
               </div>
 
               <div class="form-group">
@@ -842,6 +870,7 @@
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
     <script>
       const form = document.getElementById('jobForm');
       const submitBtn = document.getElementById('submitBtn');
@@ -851,6 +880,19 @@
       const certificationsContainer = document.getElementById('certificationsContainer');
       const certificationsTags = document.getElementById('certificationsTags');
       const generalRequirementsInput = document.getElementById('general_requirements');
+      const descriptionInput = document.getElementById('description');
+
+      const quill = new Quill('#description-editor', {
+        theme: 'snow',
+        placeholder: 'Describe the job, responsibilities, and what makes it great...',
+        modules: {
+          toolbar: [
+            ['bold', 'italic', 'underline'],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            ['clean']
+          ]
+        }
+      });
 
       const selectedCertifications = [];
       const pastelColors = [
@@ -948,6 +990,16 @@
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
+        const descriptionHtml = quill.root.innerHTML;
+        const descriptionText = quill.getText().trim();
+        
+        if (!descriptionText) {
+          alert('Please enter a job description.');
+          return;
+        }
+        
+        descriptionInput.value = descriptionHtml;
         
         submitBtn.disabled = true;
         submitBtn.textContent = 'Posting...';

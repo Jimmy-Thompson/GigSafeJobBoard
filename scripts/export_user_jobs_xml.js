@@ -105,6 +105,7 @@ async function main() {
     lines.push(`    <referencenumber>${cdata(job.id)}</referencenumber>`);
     lines.push(`    <url>${cdata(jobUrl)}</url>`);
     lines.push(`    <company>${cdata(job.company)}</company>`);
+    lines.push(`    <priority>${cdata('No')}</priority>`);
     lines.push(`    <address>${cdata(job.address ?? '')}</address>`);
     lines.push(`    <city>${cdata(job.city)}</city>`);
     lines.push(`    <state>${cdata(job.state)}</state>`);
@@ -112,7 +113,12 @@ async function main() {
     lines.push(`    <postalcode>${cdata(job.postalcode)}</postalcode>`);
     lines.push(`    <description>${cdata(job.description)}</description>`);
     lines.push(`    <jobtype>${cdata(config.jobType)}</jobtype>`);
+    lines.push(`    <salary>${cdata('')}</salary>`);
     lines.push(`    <category>${cdata(config.category)}</category>`);
+    lines.push(`    <branch>${cdata('')}</branch>`);
+    lines.push(`    <owner>${cdata('')}</owner>`);
+    lines.push(`    <statewide>${cdata('')}</statewide>`);
+    lines.push(`    <nationwide>${cdata('No')}</nationwide>`);
     lines.push(`    <notification>${cdata(config.notificationEmail)}</notification>`);
     lines.push('  </job>');
     included += 1;

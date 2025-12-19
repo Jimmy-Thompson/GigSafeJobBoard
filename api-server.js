@@ -79,13 +79,83 @@ function runXmlExport(reason) {
   child.on('close', code => { xmlExportInProgress = false; if (code !== 0) console.error(`[xml-export] failed with code ${code}`); });
 }
 
-function createPgClient() {
-  const dbUrl = process.env.DATABASE_URL;
-  const useSSL = dbUrl && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1');
+function createPgClient(useProduction = false) {
+  const isDeployment = process.env.REPLIT_DEPLOYMENT === '1';
+  const prodUrl = process.env.PRODUCTION_DATABASE_URL;
+  const devUrl = process.env.DATABASE_URL;
+  
+  let dbUrl;
+  if (useProduction && prodUrl) {
+    dbUrl = prodUrl;
+  } else if (isDeployment && prodUrl) {
+    dbUrl = prodUrl;
+  } else {
+    dbUrl = devUrl;
+  }
+  
+  const useSSL = dbUrl && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1') && !dbUrl.includes('helium');
   return new Client({ 
     connectionString: dbUrl,
     ssl: useSSL ? { rejectUnauthorized: false } : false
   });
+}
+
+async function syncJobToProduction(job) {
+  const prodUrl = process.env.PRODUCTION_DATABASE_URL;
+  if (!prodUrl) {
+    console.log('[sync] No PRODUCTION_DATABASE_URL set, skipping sync');
+    return false;
+  }
+  
+  console.log(`[sync] Syncing job ${job.id} to production database...`);
+  const client = createPgClient(true);
+  
+  try {
+    await client.connect();
+    
+    await client.query(`
+      INSERT INTO user_submitted_jobs (
+        id, job_url, title, company, city, state, address, description, pay,
+        general_requirements, schedule_details, benefits, vehicle_requirements,
+        insurance_requirement, certifications_required, source_company, submitted_at,
+        hidden, postalcode, admin_keep_visible
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      ON CONFLICT (id) DO UPDATE SET
+        job_url = EXCLUDED.job_url,
+        title = EXCLUDED.title,
+        company = EXCLUDED.company,
+        city = EXCLUDED.city,
+        state = EXCLUDED.state,
+        address = EXCLUDED.address,
+        description = EXCLUDED.description,
+        pay = EXCLUDED.pay,
+        general_requirements = EXCLUDED.general_requirements,
+        schedule_details = EXCLUDED.schedule_details,
+        benefits = EXCLUDED.benefits,
+        vehicle_requirements = EXCLUDED.vehicle_requirements,
+        insurance_requirement = EXCLUDED.insurance_requirement,
+        certifications_required = EXCLUDED.certifications_required,
+        source_company = EXCLUDED.source_company,
+        submitted_at = EXCLUDED.submitted_at,
+        hidden = EXCLUDED.hidden,
+        postalcode = EXCLUDED.postalcode,
+        admin_keep_visible = EXCLUDED.admin_keep_visible
+    `, [
+      job.id, job.job_url, job.title, job.company, job.city, job.state,
+      job.address, job.description, job.pay, job.general_requirements,
+      job.schedule_details, job.benefits, job.vehicle_requirements,
+      job.insurance_requirement, job.certifications_required, job.source_company,
+      job.submitted_at, job.hidden || false, job.postalcode, job.admin_keep_visible || false
+    ]);
+    
+    console.log(`[sync] Successfully synced job ${job.id} to production`);
+    return true;
+  } catch (err) {
+    console.error(`[sync] Error syncing job ${job.id}:`, err.message);
+    return false;
+  } finally {
+    try { await client.end(); } catch (e) {}
+  }
 }
 
 async function fetchUserJobFromPostgres(jobId) {
@@ -1039,6 +1109,9 @@ app.post('/api/jobs', jobPostingLimiter, async (req, res) => {
     });
 
     runXmlExport('job_posted');
+    
+    // Sync job to production database for external access
+    syncJobToProduction(job).catch(err => console.error('[sync] Background sync failed:', err.message));
 
     res.json({
       success: true,
@@ -1457,6 +1530,49 @@ app.get('/api/admin/check', (req, res) => {
   res.json({
     isAuthenticated: !!(req.session && req.session.isAdmin)
   });
+});
+
+// Backfill jobs to production database
+app.post('/api/admin/backfill-production', requireAdmin, async (req, res) => {
+  if (!process.env.DATABASE_URL) {
+    return res.status(400).json({ success: false, error: 'No DATABASE_URL configured' });
+  }
+  if (!process.env.PRODUCTION_DATABASE_URL) {
+    return res.status(400).json({ success: false, error: 'No PRODUCTION_DATABASE_URL configured' });
+  }
+  
+  const client = createPgClient(false); // Dev database
+  try {
+    await client.connect();
+    const result = await client.query(`
+      SELECT * FROM user_submitted_jobs 
+      WHERE hidden = false 
+      AND (admin_keep_visible = true OR submitted_at > NOW() - INTERVAL '24 hours')
+    `);
+    
+    const jobs = result.rows;
+    const results = { success: [], failed: [] };
+    
+    for (const job of jobs) {
+      const synced = await syncJobToProduction(job);
+      if (synced) {
+        results.success.push(job.id);
+      } else {
+        results.failed.push(job.id);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Synced ${results.success.length} jobs to production`,
+      details: results
+    });
+  } catch (err) {
+    console.error('[backfill] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    try { await client.end(); } catch (e) {}
+  }
 });
 
 // Protected: Get all subscribers and their certifications

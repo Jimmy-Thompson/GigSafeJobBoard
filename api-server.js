@@ -80,18 +80,11 @@ function runXmlExport(reason) {
 }
 
 function createPgClient(useProduction = false) {
-  const isDeployment = process.env.REPLIT_DEPLOYMENT === '1';
   const prodUrl = process.env.PRODUCTION_DATABASE_URL;
   const devUrl = process.env.DATABASE_URL;
   
-  let dbUrl;
-  if (useProduction && prodUrl) {
-    dbUrl = prodUrl;
-  } else if (isDeployment && prodUrl) {
-    dbUrl = prodUrl;
-  } else {
-    dbUrl = devUrl;
-  }
+  // Only use production when explicitly requested - no automatic switching
+  const dbUrl = (useProduction && prodUrl) ? prodUrl : devUrl;
   
   const useSSL = dbUrl && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1') && !dbUrl.includes('helium');
   return new Client({ 
@@ -159,11 +152,11 @@ async function syncJobToProduction(job) {
 }
 
 async function fetchUserJobFromPostgres(jobId) {
-  console.log(`[pg-fetch] Starting fetch for job ${jobId}`);
-  console.log(`[pg-fetch] DATABASE_URL exists: ${!!process.env.DATABASE_URL}`);
-  console.log(`[pg-fetch] DATABASE_URL starts with: ${process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'N/A'}`);
+  // Always use production database for job detail pages (external access)
+  const useProduction = !!process.env.PRODUCTION_DATABASE_URL;
+  console.log(`[pg-fetch] Starting fetch for job ${jobId}, using ${useProduction ? 'PRODUCTION' : 'DEV'} database`);
   
-  const client = createPgClient();
+  const client = createPgClient(useProduction);
   
   try {
     console.log(`[pg-fetch] Attempting to connect...`);

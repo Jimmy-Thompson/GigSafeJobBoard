@@ -720,68 +720,6 @@ function buildWhereClause(filters, params) {
   return `WHERE ${whereConditions.join(' AND ')}`;
 }
 
-// Diagnostic endpoint to debug production database issues
-app.get('/api/debug/db-status', async (req, res) => {
-  const status = {
-    timestamp: new Date().toISOString(),
-    environment: {
-      NODE_ENV: process.env.NODE_ENV || 'not set',
-      REPLIT_DEPLOYMENT: process.env.REPLIT_DEPLOYMENT || 'not set',
-      DATABASE_URL_EXISTS: !!process.env.DATABASE_URL,
-      DATABASE_URL_PREFIX: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 40) + '...' : 'N/A'
-    },
-    postgres: {
-      attempted: false,
-      connected: false,
-      error: null,
-      jobCount: null,
-      sampleJob: null
-    },
-    sqlite: {
-      masterDbExists: false,
-      userDbExists: false
-    }
-  };
-
-  // Check SQLite files
-  try {
-    status.sqlite.masterDbExists = fs.existsSync(path.join(__dirname, 'outputs', 'master_database', 'master_jobs.db'));
-    status.sqlite.userDbExists = fs.existsSync(path.join(__dirname, 'outputs', 'user_jobs.db'));
-  } catch (e) {
-    status.sqlite.error = e.message;
-  }
-
-  // Test PostgreSQL connection
-  if (process.env.DATABASE_URL) {
-    status.postgres.attempted = true;
-    const client = createPgClient();
-    try {
-      await client.connect();
-      status.postgres.connected = true;
-      
-      // Count jobs
-      const countResult = await client.query('SELECT COUNT(*) as count FROM user_submitted_jobs');
-      status.postgres.jobCount = parseInt(countResult.rows[0].count);
-      
-      // Get a sample job (ID 11 or 12)
-      const sampleResult = await client.query('SELECT id, title, company, hidden, admin_keep_visible, submitted_at FROM user_submitted_jobs WHERE id IN (11, 12) LIMIT 2');
-      status.postgres.sampleJobs = sampleResult.rows;
-      
-      await client.end();
-    } catch (err) {
-      status.postgres.error = {
-        name: err.constructor.name,
-        message: err.message,
-        code: err.code,
-        detail: err.detail || null
-      };
-      try { await client.end(); } catch (e) {}
-    }
-  }
-
-  res.json(status);
-});
-
 app.get('/jobs/:id', async (req, res) => {
   const jobId = Number.parseInt(req.params.id);
   console.log(`[job-detail] Request for job ID: ${jobId}, DATABASE_URL set: ${!!process.env.DATABASE_URL}`);
